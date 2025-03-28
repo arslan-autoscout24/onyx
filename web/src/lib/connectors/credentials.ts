@@ -225,6 +225,14 @@ export interface AirtableCredentialJson {
   airtable_access_token: string;
 }
 
+export interface BackstageCredentialJson {
+  backstage_client_id: string;
+  backstage_client_secret: string;
+  backstage_token_endpoint: string;
+  backstage_token_audience: string;
+
+}
+
 export const credentialTemplates: Record<ValidSources, any> = {
   github: { github_access_token: "" } as GithubCredentialJson,
   gitlab: {
@@ -344,6 +352,12 @@ export const credentialTemplates: Record<ValidSources, any> = {
   not_applicable: null,
   ingestion_api: null,
   discord: { discord_bot_token: "" } as DiscordCredentialJson,
+  backstage: {
+    backstage_client_id : "",
+    backstage_client_secret: "",
+    backstage_token_endpoint: "",
+    backstage_token_audience: "",
+  } as BackstageCredentialJson,
 
   // NOTE: These are Special Cases
   google_drive: { google_tokens: "" } as GoogleDriveCredentialJson,
@@ -351,6 +365,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
   gitbook: {
     gitbook_api_key: "",
   } as GitbookCredentialJson,
+
 };
 
 export const credentialDisplayNames: Record<string, string> = {
@@ -485,6 +500,12 @@ export const credentialDisplayNames: Record<string, string> = {
   // GitBook
   gitbook_space_id: "GitBook Space ID",
   gitbook_api_key: "GitBook API Key",
+
+  // Backstage
+  backstage_client_id: "OAuth Client ID",
+  backstage_client_secret: "OAuth Client Secret",
+  backstage_token_endpoint: "OAuth Token Endpoint",
+  backstage_token_audience: "OAuth Token Audience",
 };
 
 export function getDisplayNameForCredentialKey(key: string): string {
