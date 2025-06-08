@@ -220,6 +220,9 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     )
     files: Mapped[list["UserFile"]] = relationship("UserFile", back_populates="user")
 
+    # OAuth permissions granted through external providers like Okta
+    oauth_permissions: Mapped[list["OAuthPermission"]] = relationship("OAuthPermission", back_populates="user", cascade="all, delete-orphan")
+
     @validates("email")
     def validate_email(self, key: str, value: str) -> str:
         return value.lower() if value else value
@@ -230,6 +233,40 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         Returns True if the user has at least one OAuth (or OIDC) account.
         """
         return not bool(self.oauth_accounts)
+
+
+class OAuthPermission(Base):
+    """
+    Track OAuth-granted permissions from Okta groups.
+    
+    This table stores permissions granted to users through OAuth providers
+    (primarily Okta) based on their group memberships.
+    """
+    __tablename__ = "oauth_permission"
+    
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    permission_level: Mapped[str] = mapped_column(String(20), nullable=False)  # 'read', 'write', 'admin'
+    granted_by: Mapped[str] = mapped_column(String(50), nullable=False)  # 'okta_groups', 'manual', etc.
+    okta_groups: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string of Okta groups
+    granted_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    
+    # Relationship to User table
+    user: Mapped["User"] = relationship("User", back_populates="oauth_permissions")
+
+    def __init__(self, **kwargs):
+        # Set defaults for object creation
+        if 'id' not in kwargs:
+            kwargs['id'] = uuid4()
+        if 'granted_at' not in kwargs:
+            kwargs['granted_at'] = datetime.datetime.now(datetime.timezone.utc)
+        if 'is_active' not in kwargs:
+            kwargs['is_active'] = True
+        super().__init__(**kwargs)
+
+    def __repr__(self) -> str:
+        return f"<OAuthPermission(user_id={self.user_id}, level={self.permission_level})>"
 
 
 class AccessToken(SQLAlchemyBaseAccessTokenTableUUID, Base):
