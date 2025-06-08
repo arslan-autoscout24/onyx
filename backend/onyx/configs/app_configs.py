@@ -104,6 +104,32 @@ OAUTH_CLIENT_SECRET = (
     or ""
 )
 
+# Okta JWT Token Parsing Configuration
+OKTA_GROUPS_CLAIM = os.environ.get("OKTA_GROUPS_CLAIM", "groups")
+OKTA_DEFAULT_PERMISSION = os.environ.get("OKTA_DEFAULT_PERMISSION", "read")
+
+# Okta Group to Permission Mapping
+# Can be overridden via environment variables
+OKTA_GROUP_MAPPING = {
+    "Onyx-Admins": "admin",
+    "Onyx-Writers": "write", 
+    "Onyx-Readers": "read",
+    "Onyx-Viewers": "read",
+    "onyx-admins": "admin",  # Lowercase variants
+    "onyx-writers": "write",
+    "onyx-readers": "read",
+    "onyx-viewers": "read"
+}
+
+# Load custom group mappings from environment if provided
+_custom_group_mapping = os.environ.get("OKTA_GROUP_MAPPING_JSON")
+if _custom_group_mapping:
+    try:
+        import json
+        OKTA_GROUP_MAPPING.update(json.loads(_custom_group_mapping))
+    except (json.JSONDecodeError, TypeError):
+        pass  # Keep default mapping if custom mapping is invalid
+
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
 
 # Duration (in seconds) for which the FastAPI Users JWT token remains valid in the user's browser.
