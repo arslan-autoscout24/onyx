@@ -130,6 +130,11 @@ if _custom_group_mapping:
     except (json.JSONDecodeError, TypeError):
         pass  # Keep default mapping if custom mapping is invalid
 
+# OAuth Permissions Configuration
+OAUTH_PERMISSIONS_ENABLED = os.environ.get("OAUTH_PERMISSIONS_ENABLED", "").lower() == "true"
+OKTA_GROUP_PROCESSING_ENABLED = os.environ.get("OKTA_GROUP_PROCESSING_ENABLED", "").lower() != "false"
+OAUTH_PERMISSION_LOGGING_LEVEL = os.environ.get("OAUTH_PERMISSION_LOGGING_LEVEL", "INFO")
+
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
 
 # Duration (in seconds) for which the FastAPI Users JWT token remains valid in the user's browser.
