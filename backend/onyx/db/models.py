@@ -365,8 +365,7 @@ class DocumentSet__ConnectorCredentialPair(Base):
     )
     # if `True`, then is part of the current state of the document set
     # if `False`, then is a part of the prior state of the document set
-    # rows with `is_current=False` should be deleted when the document
-    # set is updated and should not exist for a given document set if
+    # rows with `is_current=False` should be deleted when the document set is updated and should not exist for a given document set if
     # `DocumentSet.is_up_to_date == True`
     is_current: Mapped[bool] = mapped_column(
         Boolean,
@@ -2751,7 +2750,6 @@ class PGFileStore(Base):
     file_origin: Mapped[FileOrigin] = mapped_column(Enum(FileOrigin, native_enum=False))
     file_type: Mapped[str] = mapped_column(String, default="text/plain")
     file_metadata: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
-    lobj_oid: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
 class AgentSearchMetrics(Base):
@@ -3145,85 +3143,35 @@ class UserFolder(Base):
     )
 
 
-class UserDocument(str, Enum):
-    CHAT = "chat"
-    RECENT = "recent"
-    FILE = "file"
-
-
-class UserFile(Base):
-    __tablename__ = "user_file"
+# User Document Model for CRUD operations (separate from search-focused Document model)
+class UserDocument(Base):
+    __tablename__ = "user_document"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=False)
-    assistants: Mapped[list["Persona"]] = relationship(
-        "Persona",
-        secondary=Persona__UserFile.__table__,
-        back_populates="user_files",
-    )
-    folder_id: Mapped[int | None] = mapped_column(
-        ForeignKey("user_folder.id"), nullable=True
-    )
-
-    file_id: Mapped[str] = mapped_column(nullable=False)
-    document_id: Mapped[str] = mapped_column(nullable=False)
-    name: Mapped[str] = mapped_column(nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    
+    # User relationships
+    created_by: Mapped[UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
+    updated_by: Mapped[UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
+    
+    # Timestamps
     created_at: Mapped[datetime.datetime] = mapped_column(
-        default=datetime.datetime.utcnow
+        DateTime(timezone=True), nullable=False, default=func.now()
     )
-    user: Mapped["User"] = relationship(back_populates="files")
-    folder: Mapped["UserFolder"] = relationship(back_populates="files")
-    token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-
-    cc_pair_id: Mapped[int | None] = mapped_column(
-        ForeignKey("connector_credential_pair.id"), nullable=True, unique=True
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=func.now(), onupdate=func.now()
     )
-    cc_pair: Mapped["ConnectorCredentialPair"] = relationship(
-        "ConnectorCredentialPair", back_populates="user_file"
-    )
-    link_url: Mapped[str | None] = mapped_column(String, nullable=True)
-    content_type: Mapped[str | None] = mapped_column(String, nullable=True)
-
-
-"""
-Multi-tenancy related tables
-"""
-
-
-class PublicBase(DeclarativeBase):
-    __abstract__ = True
-
-
-# Strictly keeps track of the tenant that a given user will authenticate to.
-class UserTenantMapping(Base):
-    __tablename__ = "user_tenant_mapping"
-    __table_args__ = ({"schema": "public"},)
-
-    email: Mapped[str] = mapped_column(String, nullable=False, primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(String, nullable=False, primary_key=True)
-    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-
-    @validates("email")
-    def validate_email(self, key: str, value: str) -> str:
-        return value.lower() if value else value
-
-
-class AvailableTenant(Base):
-    __tablename__ = "available_tenant"
-    """
-    These entries will only exist ephemerally and are meant to be picked up by new users on registration.
-    """
-
-    tenant_id: Mapped[str] = mapped_column(String, primary_key=True, nullable=False)
-    alembic_version: Mapped[str] = mapped_column(String, nullable=False)
-    date_created: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
-
-
-# This is a mapping from tenant IDs to anonymous user paths
-class TenantAnonymousUserPath(Base):
-    __tablename__ = "tenant_anonymous_user_path"
-
-    tenant_id: Mapped[str] = mapped_column(String, primary_key=True, nullable=False)
-    anonymous_user_path: Mapped[str] = mapped_column(
-        String, nullable=False, unique=True
+    
+    # Relationships
+    creator: Mapped["User"] = relationship("User", foreign_keys=[created_by])
+    updater: Mapped["User"] = relationship("User", foreign_keys=[updated_by])
+    
+    # Indexes for performance
+    __table_args__ = (
+        Index("ix_user_document_created_by", "created_by"),
+        Index("ix_user_document_is_public", "is_public"),
+        Index("ix_user_document_created_at", "created_at"),
+        Index("ix_user_document_title", "title"),
     )

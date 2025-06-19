@@ -478,3 +478,48 @@ class GmailCallback(BaseModel):
 class GDriveCallback(BaseModel):
     state: str
     code: str
+
+
+# Document CRUD API Models
+class DocumentCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=255, description="Document title")
+    content: str = Field(default="", description="Document content")
+    is_public: bool = Field(default=False, description="Whether document is publicly accessible")
+
+
+class DocumentUpdate(BaseModel):
+    title: str | None = Field(None, min_length=1, max_length=255, description="Document title")
+    content: str | None = Field(None, description="Document content")
+    is_public: bool | None = Field(None, description="Whether document is publicly accessible")
+
+
+class DocumentResponse(BaseModel):
+    id: int
+    title: str
+    content: str
+    is_public: bool
+    created_by: str  # user ID
+    updated_by: str  # user ID
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def from_user_document(cls, doc) -> "DocumentResponse":
+        """Create DocumentResponse from UserDocument model"""
+        return cls(
+            id=doc.id,
+            title=doc.title,
+            content=doc.content,
+            is_public=doc.is_public,
+            created_by=str(doc.created_by),
+            updated_by=str(doc.updated_by),
+            created_at=doc.created_at,
+            updated_at=doc.updated_at
+        )
+
+
+class DocumentSearchRequest(BaseModel):
+    query: str = Field(..., min_length=1, description="Search query")
+    limit: int = Field(default=100, ge=1, le=1000, description="Maximum results to return")
+    created_after: datetime | None = Field(None, description="Filter documents created after this date")
+    created_before: datetime | None = Field(None, description="Filter documents created before this date")
