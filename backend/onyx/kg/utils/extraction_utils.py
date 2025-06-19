@@ -1,12 +1,15 @@
 import re
 from collections import defaultdict
-from typing import Dict
 
 from onyx.configs.constants import OnyxCallTypes
+from onyx.configs.kg_configs import KG_METADATA_TRACKING_THRESHOLD
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entities import get_kg_entity_by_document
 from onyx.db.kg_config import KGConfigSettings
 from onyx.db.models import Document
+from onyx.db.models import KGEntityType
+from onyx.kg.models import KGAttributeTrackInfo
+from onyx.kg.models import KGAttributeTrackType
 from onyx.kg.models import KGChunkFormat
 from onyx.kg.models import KGClassificationContent
 from onyx.kg.models import (
@@ -14,6 +17,7 @@ from onyx.kg.models import (
 )
 from onyx.kg.models import KGDocumentEntitiesRelationshipsAttributes
 from onyx.kg.models import KGEnhancedDocumentMetadata
+from onyx.kg.models import KGEntityTypeClassificationInfo
 from onyx.kg.utils.formatting_utils import generalize_entities
 from onyx.kg.utils.formatting_utils import kg_email_processing
 from onyx.kg.utils.formatting_utils import make_entity_id
@@ -408,7 +412,7 @@ def prepare_llm_content_extraction(
 def prepare_llm_document_content(
     document_classification_content: KGClassificationContent,
     category_list: str,
-    category_definitions: dict[str, Dict[str, str | bool]],
+    category_definitions: dict[str, KGEntityTypeClassificationInfo],
     kg_config_settings: KGConfigSettings,
 ) -> KGDocumentClassificationPrompt:
     """
@@ -417,7 +421,7 @@ def prepare_llm_document_content(
 
     category_definition_string = ""
     for category, category_data in category_definitions.items():
-        category_definition_string += f"{category}: {category_data['description']}\n"
+        category_definition_string += f"{category}: {category_data.description}\n"
 
     if document_classification_content.source_type.lower() in [
         call_type.value.lower() for call_type in OnyxCallTypes
@@ -440,3 +444,117 @@ def is_email(email: str) -> bool:
     Check if a string is a valid email address.
     """
     return re.match(r"[^@]+@[^@]+\.[^@]+", email) is not None
+
+
+def trackinfo_to_str(trackinfo: KGAttributeTrackInfo | None) -> str:
+    """Convert trackinfo to an LLM friendly string"""
+    if trackinfo is None:
+        return ""
+
+    if trackinfo.type == KGAttributeTrackType.LIST:
+        if trackinfo.values is None:
+            return "a list of any suitable values"
+        return "a list with possible values: " + ", ".join(trackinfo.values)
+    elif trackinfo.type == KGAttributeTrackType.VALUE:
+        if trackinfo.values is None:
+            return "any suitable value"
+        return "one of: " + ", ".join(trackinfo.values)
+
+
+def trackinfo_to_dict(trackinfo: KGAttributeTrackInfo | None) -> dict | None:
+    if trackinfo is None:
+        return None
+    return {
+        "type": trackinfo.type,
+        "values": (list(trackinfo.values) if trackinfo.values else None),
+    }
+
+
+class EntityTypeMetadataTracker:
+    def __init__(self) -> None:
+        """
+        Tracks the possible values the metadata attributes can take for each entity type.
+        """
+        # entity type -> attribute -> trackinfo
+        self.entity_attr_info: dict[str, dict[str, KGAttributeTrackInfo | None]] = {}
+        self.entity_allowed_attrs: dict[str, set[str]] = {}
+
+    def import_typeinfo(self) -> None:
+        """
+        Loads the metadata tracking information from the database.
+        """
+        with get_session_with_current_tenant() as db_session:
+            entity_types = db_session.query(KGEntityType).all()
+
+        for entity_type in entity_types:
+            self.entity_attr_info[entity_type.id_name] = (
+                entity_type.parsed_attributes.attribute_values
+            )
+            self.entity_allowed_attrs[entity_type.id_name] = set(
+                entity_type.parsed_attributes.metadata_attributes.values()
+            )
+
+    def export_typeinfo(self) -> None:
+        """
+        Exports the metadata tracking information to the database.
+        """
+        with get_session_with_current_tenant() as db_session:
+            for entity_type_id_name, attribute_values in self.entity_attr_info.items():
+                db_session.query(KGEntityType).filter(
+                    KGEntityType.id_name == entity_type_id_name
+                ).update(
+                    {
+                        KGEntityType.attributes: KGEntityType.attributes.op("||")(
+                            {
+                                "attribute_values": {
+                                    attr: trackinfo_to_dict(info)
+                                    for attr, info in attribute_values.items()
+                                }
+                            }
+                        )
+                    },
+                    synchronize_session=False,
+                )
+            db_session.commit()
+
+    def track_metadata(
+        self, entity_type: str, attributes: dict[str, str | list[str]]
+    ) -> None:
+        """
+        Tracks which values are possible for the given attributes.
+        If the attribute value is a list, we track the values in the list rather than the list itself.
+        If we see to many different values, we stop tracking the attribute.
+        """
+        for attribute, value in attributes.items():
+            # ignore types/metadata we are not tracking
+            if entity_type not in self.entity_attr_info:
+                continue
+            if attribute not in self.entity_allowed_attrs[entity_type]:
+                continue
+
+            # determine if the attribute is a list or a value
+            trackinfo = self.entity_attr_info[entity_type].get(attribute, None)
+            if trackinfo is None:
+                trackinfo = KGAttributeTrackInfo(
+                    type=(
+                        KGAttributeTrackType.VALUE
+                        if isinstance(value, str)
+                        else KGAttributeTrackType.LIST
+                    ),
+                    values=set(),
+                )
+                self.entity_attr_info[entity_type][attribute] = trackinfo
+
+            # if we see to many different values, we stop tracking
+            if (
+                trackinfo.values is None
+                or len(trackinfo.values) > KG_METADATA_TRACKING_THRESHOLD
+            ):
+                trackinfo.values = None
+                continue
+
+            # track the value
+            if isinstance(value, str):
+                trackinfo.values.add(value)
+            else:
+                trackinfo.values.update(value)
