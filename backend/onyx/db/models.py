@@ -1,5 +1,6 @@
 import datetime
 import json
+from enum import Enum
 from typing import Any
 from typing import Literal
 from typing import NotRequired
@@ -78,6 +79,13 @@ from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import RerankerProvider
 
 logger = setup_logger()
+
+
+class PermissionLevel(str, Enum):
+    """OAuth permission levels for user authorization."""
+    READ = "read"
+    WRITE = "write"
+    ADMIN = "admin"
 
 
 class Base(DeclarativeBase):
@@ -246,10 +254,12 @@ class OAuthPermission(Base):
     
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
-    permission_level: Mapped[str] = mapped_column(String(20), nullable=False)  # 'read', 'write', 'admin'
+    permission_level: Mapped[PermissionLevel] = mapped_column(nullable=False)
     granted_by: Mapped[str] = mapped_column(String(50), nullable=False)  # 'okta_groups', 'manual', etc.
-    okta_groups: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string of Okta groups
+    okta_groups: Mapped[list[str] | None] = mapped_column(postgresql.JSONB(), nullable=True)  # List of Okta groups
     granted_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    source: Mapped[str] = mapped_column(String(50), default="okta", nullable=False)  # 'okta', 'manual', 'import'
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     
     # Relationship to User table
@@ -267,6 +277,26 @@ class OAuthPermission(Base):
 
     def __repr__(self) -> str:
         return f"<OAuthPermission(user_id={self.user_id}, level={self.permission_level})>"
+
+
+class PermissionHistory(Base):
+    """Track permission changes for audit purposes."""
+    __tablename__ = "permission_history"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
+    previous_level: Mapped[PermissionLevel | None] = mapped_column(nullable=True)
+    new_level: Mapped[PermissionLevel] = mapped_column(nullable=False)
+    changed_by: Mapped[UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
+    changed_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    okta_groups_before: Mapped[list[str] | None] = mapped_column(postgresql.JSONB(), nullable=True)
+    okta_groups_after: Mapped[list[str] | None] = mapped_column(postgresql.JSONB(), nullable=True)
+    source: Mapped[str] = mapped_column(String(50), default="manual", nullable=False)  # 'okta', 'manual', 'import'
+    
+    # Relationships
+    user: Mapped["User"] = relationship("User", foreign_keys=[user_id])
+    changed_by_user: Mapped["User"] = relationship("User", foreign_keys=[changed_by])
 
 
 class AdminAuditLog(Base):
@@ -1025,7 +1055,7 @@ class KGEntityExtractionStaging(Base):
 
     # Relationship to KGEntityType
     entity_type: Mapped["KGEntityType"] = relationship(
-        "KGEntityType", backref="entity_staging"
+        "KGEntityType", back_populates="entity_staging"
     )
 
     description: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -1181,6 +1211,7 @@ class KGRelationshipExtractionStaging(Base):
     # Primary identifier - now part of composite key
     id_name: Mapped[str] = mapped_column(
         NullFilteredString,
+        primary_key=True,
         nullable=False,
         index=True,
     )
@@ -2016,6 +2047,9 @@ class ChatSession(Base):
         "ChatMessage", back_populates="chat_session", cascade="all, delete-orphan"
     )
     persona: Mapped["Persona"] = relationship("Persona")
+
+
+
 
 
 class ChatMessage(Base):
@@ -3200,3 +3234,6 @@ class UserDocument(Base):
         Index("ix_user_document_created_at", "created_at"),
         Index("ix_user_document_title", "title"),
     )
+
+
+

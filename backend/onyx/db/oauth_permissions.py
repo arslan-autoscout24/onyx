@@ -368,3 +368,210 @@ async def get_user_okta_groups(user_id: UUID) -> List[str]:
         return permission.okta_groups.split(",")
     
     return []
+
+
+async def get_all_users_with_permissions(
+    limit: int = 100,
+    offset: int = 0,
+    filters: Optional[Dict[str, Any]] = None
+) -> List[Dict[str, Any]]:
+    """
+    Get all users with their permission information.
+    
+    Args:
+        limit: Maximum number of users to return
+        offset: Number of users to skip
+        filters: Optional filters (permission_level, email_search)
+        
+    Returns:
+        List of user permission dictionaries
+    """
+    async with get_async_session() as session:
+        # Base query with joins
+        stmt = select(
+            User.id,
+            User.email,
+            OAuthPermission.permission_level,
+            OAuthPermission.okta_groups,
+            OAuthPermission.granted_at,
+            OAuthPermission.updated_at,
+            OAuthPermission.source,
+            OAuthPermission.is_active
+        ).select_from(
+            User
+        ).outerjoin(
+            OAuthPermission, 
+            and_(
+                User.id == OAuthPermission.user_id,
+                OAuthPermission.is_active == True
+            )
+        )
+        
+        # Apply filters
+        if filters:
+            if "permission_level" in filters:
+                stmt = stmt.where(OAuthPermission.permission_level == filters["permission_level"])
+            if "email_search" in filters:
+                stmt = stmt.where(User.email.ilike(f"%{filters['email_search']}%"))
+        
+        # Add limit and offset
+        stmt = stmt.limit(limit).offset(offset)
+        
+        result = await session.execute(stmt)
+        rows = result.fetchall()
+        
+        users_with_permissions = []
+        for row in rows:
+            users_with_permissions.append({
+                "user_id": row.id,
+                "email": row.email,
+                "permission_level": row.permission_level or "read",  # Default to read
+                "okta_groups": row.okta_groups or [],
+                "granted_at": row.granted_at or datetime.utcnow(),
+                "last_updated": row.updated_at or datetime.utcnow(),
+                "source": row.source or "none",
+                "is_active": row.is_active if row.is_active is not None else False
+            })
+        
+        logger.info(f"Retrieved {len(users_with_permissions)} users with permissions")
+        return users_with_permissions
+
+
+async def get_permission_history(
+    user_id: UUID,
+    limit: int = 50
+) -> List[Dict[str, Any]]:
+    """
+    Get permission history for a user.
+    
+    Args:
+        user_id: UUID of the user
+        limit: Maximum number of history entries to return
+        
+    Returns:
+        List of permission history entries
+    """
+    async with get_async_session() as session:
+        from onyx.db.models import PermissionHistory
+        
+        stmt = select(PermissionHistory).where(
+            PermissionHistory.user_id == user_id
+        ).order_by(
+            PermissionHistory.changed_at.desc()
+        ).limit(limit)
+        
+        result = await session.execute(stmt)
+        history_entries = result.scalars().all()
+        
+        history_list = []
+        for entry in history_entries:
+            history_list.append({
+                "id": entry.id,
+                "user_id": entry.user_id,
+                "previous_level": entry.previous_level,
+                "new_level": entry.new_level,
+                "changed_by": entry.changed_by,
+                "changed_at": entry.changed_at,
+                "reason": entry.reason,
+                "okta_groups_before": entry.okta_groups_before or [],
+                "okta_groups_after": entry.okta_groups_after or [],
+                "source": entry.source
+            })
+        
+        logger.info(f"Retrieved {len(history_list)} permission history entries for user {user_id}")
+        return history_list
+
+
+async def log_permission_change(
+    user_id: UUID,
+    previous_level: Optional[str],
+    new_level: str,
+    changed_by: UUID,
+    reason: str,
+    okta_groups_before: Optional[List[str]] = None,
+    okta_groups_after: Optional[List[str]] = None,
+    source: str = "manual"
+) -> None:
+    """
+    Log a permission change for audit purposes.
+    
+    Args:
+        user_id: UUID of the user whose permissions changed
+        previous_level: Previous permission level
+        new_level: New permission level
+        changed_by: UUID of the user who made the change
+        reason: Reason for the change
+        okta_groups_before: Previous Okta groups
+        okta_groups_after: New Okta groups
+        source: Source of the change ('manual', 'okta', 'import')
+    """
+    async with get_async_session() as session:
+        from onyx.db.models import PermissionHistory, PermissionLevel
+        
+        # Convert string levels to enum values
+        prev_level_enum = None
+        if previous_level:
+            prev_level_enum = PermissionLevel(previous_level)
+        new_level_enum = PermissionLevel(new_level)
+        
+        history_entry = PermissionHistory(
+            user_id=user_id,
+            previous_level=prev_level_enum,
+            new_level=new_level_enum,
+            changed_by=changed_by,
+            reason=reason,
+            okta_groups_before=okta_groups_before,
+            okta_groups_after=okta_groups_after,
+            source=source
+        )
+        
+        session.add(history_entry)
+        await session.commit()
+        
+        logger.info(
+            f"Permission change logged for user {user_id}: "
+            f"{previous_level} → {new_level} by {changed_by} "
+            f"(reason: {reason})"
+        )
+
+
+async def get_user_by_id(user_id: UUID) -> Optional[User]:
+    """
+    Get a user by their ID.
+    
+    Args:
+        user_id: UUID of the user
+        
+    Returns:
+        User object if found, None otherwise
+    """
+    async with get_async_session() as session:
+        stmt = select(User).where(User.id == user_id)
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
+
+async def get_user_by_email(email: str) -> Optional[User]:
+    """
+    Get a user by their email address.
+    
+    Args:
+        email: Email address of the user
+        
+    Returns:
+        User object if found, None otherwise
+    """
+    async with get_async_session() as session:
+        stmt = select(User).where(User.email == email)
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
+
+async def calculate_permission_summary() -> Dict[str, int]:
+    """
+    Calculate a comprehensive permission summary.
+    
+    Returns:
+        Dictionary with permission statistics
+    """
+    return await get_permission_summary()
