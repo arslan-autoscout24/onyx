@@ -254,7 +254,7 @@ class OAuthPermission(Base):
     
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
-    permission_level: Mapped[PermissionLevel] = mapped_column(nullable=False)
+    permission_level: Mapped[PermissionLevel] = mapped_column(Enum(*[level.value for level in PermissionLevel], name="permission_level"), nullable=False)
     granted_by: Mapped[str] = mapped_column(String(50), nullable=False)  # 'okta_groups', 'manual', etc.
     okta_groups: Mapped[list[str] | None] = mapped_column(postgresql.JSONB(), nullable=True)  # List of Okta groups
     granted_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -285,8 +285,8 @@ class PermissionHistory(Base):
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
-    previous_level: Mapped[PermissionLevel | None] = mapped_column(nullable=True)
-    new_level: Mapped[PermissionLevel] = mapped_column(nullable=False)
+    previous_level: Mapped[PermissionLevel | None] = mapped_column(Enum(*[level.value for level in PermissionLevel], name="previous_permission_level"), nullable=True)
+    new_level: Mapped[PermissionLevel] = mapped_column(Enum(*[level.value for level in PermissionLevel], name="new_permission_level"), nullable=False)
     changed_by: Mapped[UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
     changed_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     reason: Mapped[str] = mapped_column(String(500), nullable=False)
