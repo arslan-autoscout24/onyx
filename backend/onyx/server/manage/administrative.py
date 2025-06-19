@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_curator_or_admin_user
+from onyx.server.auth_check import require_admin
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import GENERATIVE_MODEL_ACCESS_CHECK_FREQ
 from onyx.configs.constants import DocumentSource
@@ -50,9 +51,11 @@ logger = setup_logger()
 def get_most_boosted_docs(
     ascending: bool,
     limit: int,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_admin),
     db_session: Session = Depends(get_session),
 ) -> list[BoostDoc]:
+    """Get most boosted documents - requires admin permission."""
+    logger.info(f"Admin {user.id} retrieving boosted documents")
     boost_docs = fetch_docs_ranked_by_boost_for_user(
         ascending=ascending,
         limit=limit,

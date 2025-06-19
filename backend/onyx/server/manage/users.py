@@ -32,6 +32,8 @@ from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
 from onyx.auth.users import optional_user
+from onyx.server.auth_check import require_admin
+from onyx.auth.admin_audit import log_admin_action, AdminActions, ResourceTypes
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import AuthBackend
@@ -289,17 +291,12 @@ def list_all_users(
 @router.put("/manage/admin/users")
 def bulk_invite_users(
     emails: list[str] = Body(..., embed=True),
-    current_user: User | None = Depends(current_admin_user),
+    admin_user: User = Depends(require_admin),
     db_session: Session = Depends(get_session),
 ) -> int:
-    """emails are string validated. If any email fails validation, no emails are
-    invited and an exception is raised."""
+    """Bulk invite users - requires admin permission."""
+    logger.info(f"Admin {admin_user.id} bulk inviting {len(emails)} users")
     tenant_id = get_current_tenant_id()
-
-    if current_user is None:
-        raise HTTPException(
-            status_code=400, detail="Auth is disabled, cannot invite users"
-        )
 
     new_invited_emails = []
     email: str
@@ -395,15 +392,13 @@ def remove_invited_user(
 @router.patch("/manage/admin/deactivate-user")
 def deactivate_user(
     user_email: UserByEmail,
-    current_user: User | None = Depends(current_admin_user),
+    admin_user: User = Depends(require_admin),
     db_session: Session = Depends(get_session),
 ) -> None:
-    if current_user is None:
-        raise HTTPException(
-            status_code=400, detail="Auth is disabled, cannot deactivate user"
-        )
+    """Deactivate a user - requires admin permission."""
+    logger.info(f"Admin {admin_user.id} deactivating user: {user_email.user_email}")
 
-    if current_user.email == user_email.user_email:
+    if admin_user.email == user_email.user_email:
         raise HTTPException(status_code=400, detail="You cannot deactivate yourself")
 
     user_to_deactivate = get_user_by_email(
@@ -419,6 +414,19 @@ def deactivate_user(
     user_to_deactivate.is_active = False
     db_session.add(user_to_deactivate)
     db_session.commit()
+    
+    # Log admin audit action
+    log_admin_action(
+        db_session=db_session,
+        admin_user=admin_user,
+        action=AdminActions.DEACTIVATE_USER,
+        resource_type=ResourceTypes.USER,
+        resource_id=str(user_to_deactivate.id),
+        details={
+            "deactivated_user_email": user_to_deactivate.email,
+            "deactivated_user_id": str(user_to_deactivate.id)
+        }
+    )
 
 
 @router.delete("/manage/admin/delete-user")

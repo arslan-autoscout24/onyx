@@ -115,6 +115,12 @@ from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import get_current_tenant_id
 
+# OAuth Permissions Enhancement imports
+from onyx.auth.okta_parser import parse_okta_token_for_permissions
+from onyx.db.oauth_permissions import update_user_oauth_permission
+from onyx.configs.app_configs import OAUTH_PERMISSIONS_ENABLED
+from onyx.configs.app_configs import OKTA_GROUP_PROCESSING_ENABLED
+
 logger = setup_logger()
 
 
@@ -523,7 +529,46 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             if token:
                 CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
+            # Process Okta groups for OIDC provider only (Story 2.1 Enhancement)
+            if (OAUTH_PERMISSIONS_ENABLED and OKTA_GROUP_PROCESSING_ENABLED and 
+                oauth_name == 'oidc' and access_token):
+                logger.info(f"Processing Okta groups for user {user.id}")
+                await self._process_okta_groups(user, access_token)
+            else:
+                logger.debug(f"Skipping group processing for provider: {oauth_name}")
+
             return user
+
+    async def _process_okta_groups(self, user: User, access_token: str) -> None:
+        """
+        Process Okta groups from access token and update user permissions.
+        
+        Args:
+            user: The authenticated user
+            access_token: JWT access token from Okta
+        """
+        try:
+            # Parse token and extract permission level
+            permission_level, okta_groups = parse_okta_token_for_permissions(access_token)
+            
+            logger.info(
+                f"Extracted permission '{permission_level}' from groups {okta_groups} for user {user.id}"
+            )
+            
+            # Update user's OAuth permissions in database
+            await update_user_oauth_permission(
+                user_id=user.id,
+                permission_level=permission_level,
+                okta_groups=okta_groups,
+                granted_by="okta_groups"
+            )
+            
+            logger.info(f"Successfully updated OAuth permissions for user {user.id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to process Okta groups for user {user.id}: {str(e)}")
+            # Don't raise exception - we don't want to break login for permission processing failures
+            # User will get default 'read' permission from the permission service
 
     async def on_after_login(
         self,

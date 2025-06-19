@@ -104,6 +104,42 @@ OAUTH_CLIENT_SECRET = (
     or ""
 )
 
+# Okta JWT Token Parsing Configuration
+OKTA_GROUPS_CLAIM = os.environ.get("OKTA_GROUPS_CLAIM", "groups")
+OKTA_DEFAULT_PERMISSION = os.environ.get("OKTA_DEFAULT_PERMISSION", "read")
+
+# Okta Group to Permission Mapping
+# Can be overridden via environment variables
+OKTA_GROUP_MAPPING = {
+    "Onyx-Admins": "admin",
+    "Onyx-Writers": "write", 
+    "Onyx-Readers": "read",
+    "Onyx-Viewers": "read",
+    "onyx-admins": "admin",  # Lowercase variants
+    "onyx-writers": "write",
+    "onyx-readers": "read",
+    "onyx-viewers": "read"
+}
+
+# Load custom group mappings from environment if provided
+_custom_group_mapping = os.environ.get("OKTA_GROUP_MAPPING_JSON")
+if _custom_group_mapping:
+    try:
+        import json
+        OKTA_GROUP_MAPPING.update(json.loads(_custom_group_mapping))
+    except (json.JSONDecodeError, TypeError):
+        pass  # Keep default mapping if custom mapping is invalid
+
+# OAuth Permissions Configuration
+OAUTH_PERMISSIONS_ENABLED = os.environ.get("OAUTH_PERMISSIONS_ENABLED", "").lower() == "true"
+OKTA_GROUP_PROCESSING_ENABLED = os.environ.get("OKTA_GROUP_PROCESSING_ENABLED", "").lower() != "false"
+OAUTH_PERMISSION_LOGGING_LEVEL = os.environ.get("OAUTH_PERMISSION_LOGGING_LEVEL", "INFO")
+
+# Permission Service Configuration
+PERMISSION_CACHE_TTL_MINUTES = int(os.environ.get("PERMISSION_CACHE_TTL_MINUTES", "5"))
+PERMISSION_CACHE_CLEANUP_INTERVAL_MINUTES = int(os.environ.get("PERMISSION_CACHE_CLEANUP_INTERVAL_MINUTES", "30"))
+PERMISSION_SERVICE_METRICS_ENABLED = os.environ.get("PERMISSION_SERVICE_METRICS_ENABLED", "").lower() != "false"
+
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
 
 # Duration (in seconds) for which the FastAPI Users JWT token remains valid in the user's browser.

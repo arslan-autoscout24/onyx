@@ -4,6 +4,7 @@ import { UserProvider } from "../user/UserProvider";
 import { ProviderContextProvider } from "../chat/ProviderContext";
 import { SettingsProvider } from "../settings/SettingsProvider";
 import { AssistantsProvider } from "./AssistantsContext";
+import { PermissionProvider } from "./PermissionContext";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { User } from "@/lib/types";
 import { ModalProvider } from "./ModalContext";
@@ -35,15 +36,17 @@ export const AppProvider = ({
         user={user}
         authTypeMetadata={authTypeMetadata}
       >
-        <ProviderContextProvider>
-          <AssistantsProvider
-            initialAssistants={assistants}
-            hasAnyConnectors={hasAnyConnectors}
-            hasImageCompatibleModel={hasImageCompatibleModel}
-          >
-            <ModalProvider user={user}>{children}</ModalProvider>
-          </AssistantsProvider>
-        </ProviderContextProvider>
+        <PermissionProvider>
+          <ProviderContextProvider>
+            <AssistantsProvider
+              initialAssistants={assistants}
+              hasAnyConnectors={hasAnyConnectors}
+              hasImageCompatibleModel={hasImageCompatibleModel}
+            >
+              <ModalProvider user={user}>{children}</ModalProvider>
+            </AssistantsProvider>
+          </ProviderContextProvider>
+        </PermissionProvider>
       </UserProvider>
     </SettingsProvider>
   );

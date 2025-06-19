@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: onyx-oauth-config
+data:
+  OKTA_DOMAIN: "your-org.okta.com"
+  OKTA_GROUPS_CLAIM: "groups"
+  OKTA_ADMIN_GROUP: "Onyx-Admins"
+  OKTA_WRITE_GROUP: "Onyx-Writers"
+  OKTA_READ_GROUP: "Onyx-Readers"
+  OAUTH_PERMISSIONS_ENABLED: "true"
+  OAUTH_PERMISSION_ENFORCEMENT: "true"
+  OKTA_GROUP_PROCESSING: "true"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: onyx-oauth-secrets
+type: Opaque
+stringData:
+  OKTA_CLIENT_ID: "your_okta_client_id"
+  OKTA_CLIENT_SECRET: "your_okta_client_secret"

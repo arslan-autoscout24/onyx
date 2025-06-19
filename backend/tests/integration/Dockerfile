@@ -66,7 +66,6 @@ RUN apt-get update && \
 WORKDIR /app
 
 # Enterprise Version Files
-COPY ./ee /app/ee
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Set up application files

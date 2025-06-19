@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  backend:
+    environment:
+      # OAuth Configuration
+      - OKTA_DOMAIN=${OKTA_DOMAIN}
+      - OKTA_CLIENT_ID=${OKTA_CLIENT_ID}
+      - OKTA_CLIENT_SECRET=${OKTA_CLIENT_SECRET}
+      - OKTA_GROUPS_CLAIM=${OKTA_GROUPS_CLAIM:-groups}
+      - OIDC_WELL_KNOWN_URL=https://${OKTA_DOMAIN}/oauth2/default/.well-known/openid-configuration
+      
+      # Permission Settings
+      - OAUTH_PERMISSIONS_ENABLED=${OAUTH_PERMISSIONS_ENABLED:-true}
+      - OAUTH_PERMISSION_ENFORCEMENT=${OAUTH_PERMISSION_ENFORCEMENT:-true}
+      - OKTA_GROUP_PROCESSING=${OKTA_GROUP_PROCESSING:-true}
+      
+      # Group Mappings
+      - OKTA_ADMIN_GROUP=${OKTA_ADMIN_GROUP:-Onyx-Admins}
+      - OKTA_WRITE_GROUP=${OKTA_WRITE_GROUP:-Onyx-Writers}
+      - OKTA_READ_GROUP=${OKTA_READ_GROUP:-Onyx-Readers}

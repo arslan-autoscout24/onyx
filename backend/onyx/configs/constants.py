@@ -434,6 +434,9 @@ class OnyxCeleryTask:
     CHECK_FOR_LLM_MODEL_UPDATE = "check_for_llm_model_update"
     CHECK_FOR_USER_FILE_FOLDER_SYNC = "check_for_user_file_folder_sync"
 
+    # Permission Service
+    PERMISSION_CACHE_CLEANUP = "permission_cache_cleanup"
+
     # Connector checkpoint cleanup
     CHECK_FOR_CHECKPOINT_CLEANUP = "check_for_checkpoint_cleanup"
     CLEANUP_CHECKPOINT = "cleanup_checkpoint"
