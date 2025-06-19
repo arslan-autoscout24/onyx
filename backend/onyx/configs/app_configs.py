@@ -135,6 +135,11 @@ OAUTH_PERMISSIONS_ENABLED = os.environ.get("OAUTH_PERMISSIONS_ENABLED", "").lowe
 OKTA_GROUP_PROCESSING_ENABLED = os.environ.get("OKTA_GROUP_PROCESSING_ENABLED", "").lower() != "false"
 OAUTH_PERMISSION_LOGGING_LEVEL = os.environ.get("OAUTH_PERMISSION_LOGGING_LEVEL", "INFO")
 
+# Permission Service Configuration
+PERMISSION_CACHE_TTL_MINUTES = int(os.environ.get("PERMISSION_CACHE_TTL_MINUTES", "5"))
+PERMISSION_CACHE_CLEANUP_INTERVAL_MINUTES = int(os.environ.get("PERMISSION_CACHE_CLEANUP_INTERVAL_MINUTES", "30"))
+PERMISSION_SERVICE_METRICS_ENABLED = os.environ.get("PERMISSION_SERVICE_METRICS_ENABLED", "").lower() != "false"
+
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
 
 # Duration (in seconds) for which the FastAPI Users JWT token remains valid in the user's browser.
