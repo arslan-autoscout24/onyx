@@ -269,6 +269,31 @@ class OAuthPermission(Base):
         return f"<OAuthPermission(user_id={self.user_id}, level={self.permission_level})>"
 
 
+class AdminAuditLog(Base):
+    """
+    Audit log for administrative operations.
+    
+    This table records all admin-level operations for security and compliance.
+    """
+    __tablename__ = "admin_audit_log"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    admin_user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
+    action: Mapped[str] = mapped_column(String(100), nullable=False)
+    resource_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    resource_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    details: Mapped[dict | None] = mapped_column(postgresql.JSON(), nullable=True)
+    timestamp: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    
+    # Relationship to User table
+    admin_user: Mapped["User"] = relationship("User", foreign_keys=[admin_user_id])
+    
+    def __repr__(self) -> str:
+        return f"<AdminAuditLog(admin_user_id={self.admin_user_id}, action={self.action})>"
+
+
 class AccessToken(SQLAlchemyBaseAccessTokenTableUUID, Base):
     pass
 

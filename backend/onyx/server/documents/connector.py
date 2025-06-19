@@ -22,6 +22,8 @@ from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
+from onyx.server.auth_check import require_admin
+from onyx.auth.admin_audit import log_admin_action, AdminActions, ResourceTypes
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import ENABLED_CONNECTOR_TYPES
 from onyx.configs.app_configs import MOCK_CONNECTOR_FILE_PATH
@@ -147,8 +149,10 @@ router = APIRouter(prefix="/manage")
 
 @router.get("/admin/connector/gmail/app-credential")
 def check_google_app_gmail_credentials_exist(
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_admin),
 ) -> dict[str, str]:
+    """Check Gmail app credentials - requires admin permission."""
+    logger.info(f"Admin {user.id} checking Gmail app credentials")
     try:
         return {"client_id": get_google_app_cred(DocumentSource.GMAIL).web.client_id}
     except KvKeyNotFoundError:
@@ -157,8 +161,11 @@ def check_google_app_gmail_credentials_exist(
 
 @router.put("/admin/connector/gmail/app-credential")
 def upsert_google_app_gmail_credentials(
-    app_credentials: GoogleAppCredentials, _: User = Depends(current_admin_user)
+    app_credentials: GoogleAppCredentials, 
+    user: User = Depends(require_admin)
 ) -> StatusResponse:
+    """Update Gmail app credentials - requires admin permission."""
+    logger.info(f"Admin {user.id} updating Gmail app credentials")
     try:
         upsert_google_app_cred(app_credentials, DocumentSource.GMAIL)
     except ValueError as e:
@@ -171,9 +178,11 @@ def upsert_google_app_gmail_credentials(
 
 @router.delete("/admin/connector/gmail/app-credential")
 def delete_google_app_gmail_credentials(
-    _: User = Depends(current_admin_user),
+    user: User = Depends(require_admin),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
+    """Delete Gmail app credentials - requires admin permission."""
+    logger.info(f"Admin {user.id} deleting Gmail app credentials")
     try:
         delete_google_app_cred(DocumentSource.GMAIL)
         cleanup_gmail_credentials(db_session=db_session)
@@ -187,8 +196,10 @@ def delete_google_app_gmail_credentials(
 
 @router.get("/admin/connector/google-drive/app-credential")
 def check_google_app_credentials_exist(
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_admin),
 ) -> dict[str, str]:
+    """Check Google Drive app credentials - requires admin permission."""
+    logger.info(f"Admin {user.id} checking Google Drive app credentials")
     try:
         return {
             "client_id": get_google_app_cred(DocumentSource.GOOGLE_DRIVE).web.client_id
@@ -492,19 +503,22 @@ def upload_files(files: list[UploadFile], db_session: Session) -> FileUploadResp
 @router.post("/admin/connector/file/upload")
 def upload_files_api(
     files: list[UploadFile],
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_admin),
     db_session: Session = Depends(get_session),
 ) -> FileUploadResponse:
+    """Upload files to connector storage - requires admin permission.""" 
+    logger.info(f"Admin {user.id} uploading {len(files)} files")
     return upload_files(files, db_session)
 
 
 @router.get("/admin/connector")
 def get_connectors_by_credential(
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_admin),
     db_session: Session = Depends(get_session),
     credential: int | None = None,
 ) -> list[ConnectorSnapshot]:
-    """Get a list of connectors. Allow filtering by a specific credential id."""
+    """Get a list of connectors - requires admin permission."""
+    logger.info(f"Admin {user.id} retrieving connectors")
 
     connectors = fetch_connectors(db_session)
 
@@ -534,12 +548,14 @@ def get_connectors_by_credential(
 @router.get("/admin/connector/failed-indexing-status")
 def get_currently_failed_indexing_status(
     secondary_index: bool = False,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_admin),
     db_session: Session = Depends(get_session),
     get_editable: bool = Query(
         False, description="If true, return editable document sets"
     ),
 ) -> list[FailedConnectorIndexingStatus]:
+    """Get failed indexing status - requires admin permission."""
+    logger.info(f"Admin {user.id} retrieving failed indexing status")
     # Get the latest failed indexing attempts
     latest_failed_indexing_attempts = get_latest_index_attempts_by_status(
         secondary_index=secondary_index,
@@ -876,9 +892,11 @@ def _validate_connector_allowed(source: DocumentSource) -> None:
 @router.post("/admin/connector")
 def create_connector_from_model(
     connector_data: ConnectorUpdateRequest,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_admin),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
+    """Create a new connector - requires admin permission."""
+    logger.info(f"Admin {user.id} creating connector: {connector_data.name}")
     tenant_id = get_current_tenant_id()
 
     try:
@@ -905,6 +923,20 @@ def create_connector_from_model(
             event_type=MilestoneRecordType.CREATED_CONNECTOR,
             properties=None,
             db_session=db_session,
+        )
+        
+        # Log admin audit action
+        log_admin_action(
+            db_session=db_session,
+            admin_user=user,
+            action=AdminActions.CREATE_CONNECTOR,
+            resource_type=ResourceTypes.CONNECTOR,
+            resource_id=str(connector_response.id),
+            details={
+                "connector_name": connector_data.name,
+                "connector_source": connector_data.source.value,
+                "access_type": connector_data.access_type.value if connector_data.access_type else None,
+            }
         )
 
         return connector_response
@@ -1044,15 +1076,29 @@ def update_connector_from_model(
 @router.delete("/admin/connector/{connector_id}", response_model=StatusResponse[int])
 def delete_connector_by_id(
     connector_id: int,
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_admin),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
+    """Delete a connector - requires admin permission."""
+    logger.info(f"Admin {user.id} deleting connector: {connector_id}")
     try:
         with db_session.begin():
-            return delete_connector(
+            result = delete_connector(
                 db_session=db_session,
                 connector_id=connector_id,
             )
+            
+            # Log admin audit action
+            log_admin_action(
+                db_session=db_session,
+                admin_user=user,
+                action=AdminActions.DELETE_CONNECTOR,
+                resource_type=ResourceTypes.CONNECTOR,
+                resource_id=str(connector_id),
+                details={"connector_id": connector_id}
+            )
+            
+            return result
     except AssertionError:
         raise HTTPException(status_code=400, detail="Connector is not deletable")
 
