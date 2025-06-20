@@ -1,6 +1,6 @@
 import datetime
 import json
-from enum import Enum
+from enum import Enum as PyEnum
 from typing import Any
 from typing import Literal
 from typing import NotRequired
@@ -8,6 +8,7 @@ from typing import Optional
 from uuid import uuid4
 
 from pydantic import BaseModel
+from pydantic_core import core_schema
 from sqlalchemy.orm import validates
 from typing_extensions import TypedDict  # noreorder
 from uuid import UUID
@@ -63,6 +64,7 @@ from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
+from onyx.db.enums import PermissionLevel
 from onyx.db.enums import TaskStatus
 from onyx.db.pydantic_type import PydanticType
 from onyx.utils.logger import setup_logger
@@ -79,13 +81,6 @@ from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import RerankerProvider
 
 logger = setup_logger()
-
-
-class PermissionLevel(str, Enum):
-    """OAuth permission levels for user authorization."""
-    READ = "read"
-    WRITE = "write"
-    ADMIN = "admin"
 
 
 class Base(DeclarativeBase):
@@ -254,7 +249,7 @@ class OAuthPermission(Base):
     
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
-    permission_level: Mapped[PermissionLevel] = mapped_column(Enum(*[level.value for level in PermissionLevel], name="permission_level"), nullable=False)
+    permission_level: Mapped[PermissionLevel] = mapped_column(Enum(PermissionLevel, native_enum=False), nullable=False)
     granted_by: Mapped[str] = mapped_column(String(50), nullable=False)  # 'okta_groups', 'manual', etc.
     okta_groups: Mapped[list[str] | None] = mapped_column(postgresql.JSONB(), nullable=True)  # List of Okta groups
     granted_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -285,8 +280,8 @@ class PermissionHistory(Base):
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
-    previous_level: Mapped[PermissionLevel | None] = mapped_column(Enum(*[level.value for level in PermissionLevel], name="previous_permission_level"), nullable=True)
-    new_level: Mapped[PermissionLevel] = mapped_column(Enum(*[level.value for level in PermissionLevel], name="new_permission_level"), nullable=False)
+    previous_level: Mapped[PermissionLevel | None] = mapped_column(Enum(PermissionLevel, native_enum=False), nullable=True)
+    new_level: Mapped[PermissionLevel] = mapped_column(Enum(PermissionLevel, native_enum=False), nullable=False)
     changed_by: Mapped[UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
     changed_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     reason: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -780,6 +775,11 @@ class KGEntityType(Base):
         comment="Clustering information for this entity type",
     )
 
+    # Relationship to KGEntityExtractionStaging
+    entity_staging: Mapped[list["KGEntityExtractionStaging"]] = relationship(
+        "KGEntityExtractionStaging", back_populates="entity_type"
+    )
+
 
 class KGRelationshipType(Base):
     __tablename__ = "kg_relationship_type"
@@ -1211,13 +1211,12 @@ class KGRelationshipExtractionStaging(Base):
     # Primary identifier - now part of composite key
     id_name: Mapped[str] = mapped_column(
         NullFilteredString,
-        primary_key=True,
         nullable=False,
         index=True,
     )
 
-    source_document: Mapped[str | None] = mapped_column(
-        NullFilteredString, ForeignKey("document.id"), nullable=True, index=True
+    source_document: Mapped[str] = mapped_column(
+        NullFilteredString, ForeignKey("document.id"), nullable=False, index=True
     )
 
     # Source and target nodes (foreign keys to Entity table)
@@ -2047,9 +2046,6 @@ class ChatSession(Base):
         "ChatMessage", back_populates="chat_session", cascade="all, delete-orphan"
     )
     persona: Mapped["Persona"] = relationship("Persona")
-
-
-
 
 
 class ChatMessage(Base):
@@ -3233,6 +3229,40 @@ class UserDocument(Base):
         Index("ix_user_document_is_public", "is_public"),
         Index("ix_user_document_created_at", "created_at"),
         Index("ix_user_document_title", "title"),
+    )
+
+
+class UserFile(Base):
+    __tablename__ = "user_file"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=True)
+    folder_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_folder.id"), nullable=True
+    )
+    link_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    file_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    document_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.datetime.utcnow
+    )
+    cc_pair_id: Mapped[int | None] = mapped_column(
+        ForeignKey("connector_credential_pair.id"), nullable=True, unique=True
+    )
+
+    # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="files")
+    folder: Mapped["UserFolder"] = relationship("UserFolder", back_populates="files")
+    cc_pair: Mapped["ConnectorCredentialPair"] = relationship(
+        "ConnectorCredentialPair", back_populates="user_file"
+    )
+    assistants: Mapped[list["Persona"]] = relationship(
+        "Persona",
+        secondary=Persona__UserFile.__table__,
+        back_populates="user_files",
     )
 
 

@@ -18,7 +18,6 @@ from onyx.db.models import User
 from onyx.db.oauth_permissions import get_user_permission_level
 from onyx.redis.redis_pool import get_redis_client
 from onyx.configs.app_configs import APP_API_PREFIX
-from onyx.server.onyx_api.ingestion import api_key_dep
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 import json
@@ -245,6 +244,8 @@ def check_router_auth(
     (1) have auth enabled OR
     (2) are explicitly marked as a public endpoint
     """
+    # Import locally to avoid circular import
+    from onyx.auth.users import api_key_dep
 
     control_plane_dep = fetch_ee_implementation_or_noop(
         "onyx.server.tenants.access", "control_plane_dep"

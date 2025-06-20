@@ -12,7 +12,7 @@ from typing import List, Optional, Dict, Any
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from onyx.auth.users import current_user
 from onyx.server.auth_check import require_admin
@@ -37,6 +37,8 @@ router = APIRouter(prefix="/auth", tags=["permissions"])
 
 class UserPermissionResponse(BaseModel):
     """Response model for user permission information."""
+    model_config = ConfigDict(from_attributes=True, arbitrary_types_allowed=True)
+    
     user_id: UUID
     email: str
     permission_level: PermissionLevel
@@ -46,12 +48,11 @@ class UserPermissionResponse(BaseModel):
     source: str  # 'okta', 'manual', etc.
     is_active: bool
 
-    class Config:
-        from_attributes = True
-
 
 class PermissionHistoryEntry(BaseModel):
     """Model for permission history tracking."""
+    model_config = ConfigDict(from_attributes=True, arbitrary_types_allowed=True)
+    
     id: int
     user_id: UUID
     previous_level: Optional[PermissionLevel]
@@ -63,18 +64,19 @@ class PermissionHistoryEntry(BaseModel):
     okta_groups_after: List[str]
     source: str
 
-    class Config:
-        from_attributes = True
-
 
 class PermissionUpdate(BaseModel):
     """Model for permission updates."""
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
     permission_level: PermissionLevel
     reason: str
 
 
 class BulkPermissionUpdate(BaseModel):
     """Model for bulk permission updates."""
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
     user_ids: List[UUID]
     permission_level: PermissionLevel
     reason: str
