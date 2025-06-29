@@ -69,7 +69,15 @@ export default function NewTenantModal({
       }
 
       // Common logout and redirect for both flows
-      await logout();
+      const response = await logout();
+      
+      // Check if this is an OIDC logout redirect (status 204)
+      if (response.status === 204) {
+        // OIDC logout redirect is happening, don't do local redirect
+        handleClose();
+        return;
+      }
+      
       router.push(`/auth/join?email=${encodeURIComponent(user?.email || "")}`);
       handleClose();
     } catch (error) {

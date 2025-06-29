@@ -95,12 +95,51 @@ export function UserDropdown({
   }
 
   const handleLogout = () => {
-    logout().then((isSuccess) => {
-      if (!isSuccess) {
-        alert("Failed to logout");
+    console.log("[LOGOUT DEBUG] Starting manual logout via proper route");
+    // Use the proper logout route that handles OIDC
+    fetch("/auth/logout", {
+      method: "POST",
+      credentials: "include",
+      redirect: "manual"  // Handle redirects manually
+    }).then((response) => {
+      console.log("[LOGOUT DEBUG] Logout response:", response.status, response.statusText);
+      
+      // Check if this is a redirect to Keycloak logout (307/302)
+      if (response.status === 307 || response.status === 302) {
+        const redirectUrl = response.headers.get("Location");
+        console.log("[LOGOUT DEBUG] OIDC logout redirect to:", redirectUrl);
+        if (redirectUrl) {
+          // Follow the redirect to Keycloak logout
+          window.location.href = redirectUrl;
+          return;
+        }
+      }
+      
+      // Check if logout was successful (204 means cookies cleared and logout complete)
+      if (response.status === 204) {
+        console.log("[LOGOUT DEBUG] Logout successful, redirecting to login page");
+        // Logout successful, redirect to login page with auto-redirect disabled
+        window.location.href = "/auth/login?disableAutoRedirect=true";
+        return;
+      }
+      
+      // Check if user was already logged out (status 200 from backend)
+      if (response.status === 200) {
+        console.log("[LOGOUT DEBUG] User already logged out, redirecting to login page");
+        // User was already logged out, redirect to login with auto-redirect disabled
+        window.location.href = "/auth/login?disableAutoRedirect=true";
+        return;
+      }
+      
+      if (!response.ok) {
+        console.log("[LOGOUT DEBUG] Logout failed:", response.status, response.statusText);
+        // Fallback: Direct redirect to Keycloak logout
+        console.log("[LOGOUT DEBUG] Trying direct Keycloak logout as fallback");
+        window.location.href = "http://localhost:8089/realms/demo/protocol/openid-connect/logout?client_id=onyx&post_logout_redirect_uri=http://localhost:3000/auth/login?disableAutoRedirect=true";
         return;
       }
 
+      // For regular (non-OIDC) logout, redirect to login page
       // Construct the current URL
       const currentUrl = `${pathname}${
         searchParams?.toString() ? `?${searchParams.toString()}` : ""

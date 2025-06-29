@@ -465,35 +465,14 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
             prefix="/auth/oidc",
         )
 
-        # Need basic auth router for `logout` endpoint
+        # Enhanced logout router with OIDC support - detects auth type and handles Keycloak logout
         include_auth_router_with_prefix(
             application,
             fastapi_users.get_logout_router(auth_backend),
             prefix="/auth",
         )
 
-        # Add OIDC-specific logout that redirects to Keycloak logout
-        @application.post("/auth/oidc/logout")
-        async def oidc_logout():
-            from fastapi.responses import RedirectResponse
-            import httpx
-            
-            # Get Keycloak's end session endpoint
-            try:
-                async with httpx.AsyncClient() as client:
-                    response = await client.get(OIDC_ISSUER)
-                    oidc_config = response.json()
-                    end_session_endpoint = oidc_config.get("end_session_endpoint")
-                    
-                    if end_session_endpoint:
-                        # Redirect to Keycloak logout with post_logout_redirect_uri
-                        logout_url = f"{end_session_endpoint}?post_logout_redirect_uri={WEB_DOMAIN}"
-                        return RedirectResponse(url=logout_url)
-            except Exception as e:
-                logger.warning(f"Failed to get OIDC logout endpoint: {e}")
-            
-            # Fallback: redirect to home page
-            return RedirectResponse(url=WEB_DOMAIN)
+        # The enhanced logout router at /auth/logout already handles OIDC logout logic
 
     if (
         AUTH_TYPE == AuthType.CLOUD

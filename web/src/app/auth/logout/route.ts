@@ -12,9 +12,12 @@ export const POST = async (request: NextRequest) => {
     return new Response(response.body, { status: response?.status });
   }
 
-  // Delete cookies only if cloud is enabled (jwt auth)
-  if (NEXT_PUBLIC_CLOUD_ENABLED) {
-    const cookiesToDelete = ["fastapiusersauth"];
+  // Check if backend returned a redirect (for OIDC logout to Keycloak)
+  if (response && (response.status === 307 || response.status === 302)) {
+    console.log("Frontend logout route: Clearing cookies and redirecting to Keycloak");
+    
+    // Clear cookies BEFORE redirecting to Keycloak
+    const cookiesToDelete = ["fastapiusersauth", "onyx_tid"];
     const cookieOptions = {
       path: "/",
       secure: process.env.NODE_ENV === "production",
@@ -22,8 +25,7 @@ export const POST = async (request: NextRequest) => {
       sameSite: "lax" as const,
     };
 
-    // Logout successful, delete cookies
-    const headers = new Headers();
+    const headers = new Headers(response.headers); // Copy redirect headers
 
     cookiesToDelete.forEach((cookieName) => {
       headers.append(
@@ -33,12 +35,37 @@ export const POST = async (request: NextRequest) => {
           .join("; ")}`
       );
     });
-
+    
+    // Return redirect with cookies cleared
     return new Response(null, {
-      status: 204,
-      headers: headers,
+      status: response.status,
+      headers: headers
     });
-  } else {
-    return new Response(null, { status: 204 });
   }
+
+  // For non-redirect responses, clear cookies and return success
+  const cookiesToDelete = ["fastapiusersauth", "onyx_tid"];
+  const cookieOptions = {
+    path: "/",
+    secure: process.env.NODE_ENV === "production",
+    httpOnly: true,
+    sameSite: "lax" as const,
+  };
+
+  // Logout successful, delete cookies
+  const headers = new Headers();
+
+  cookiesToDelete.forEach((cookieName) => {
+    headers.append(
+      "Set-Cookie",
+      `${cookieName}=; Max-Age=0; ${Object.entries(cookieOptions)
+        .map(([key, value]) => `${key}=${value}`)
+        .join("; ")}`
+    );
+  });
+
+  return new Response(null, {
+    status: 204,
+    headers: headers,
+  });
 };

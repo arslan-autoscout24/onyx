@@ -19,7 +19,21 @@ export const logout = async (): Promise<Response> => {
   const response = await fetch("/api/auth/logout", {
     method: "POST",
     credentials: "include",
+    redirect: "manual", // Don't follow redirects automatically
   });
+  
+  // Check if it's a redirect response (for OIDC logout)
+  if (response.status === 307 || response.status === 302) {
+    const location = response.headers.get("location");
+    
+    if (location) {
+      // For OIDC logout, redirect the entire window to Keycloak logout
+      window.location.href = location;
+      // Return a special response to indicate OIDC redirect happened
+      return new Response(null, { status: 204 }); // 204 = No Content, signals OIDC redirect
+    }
+  }
+  
   return response;
 };
 

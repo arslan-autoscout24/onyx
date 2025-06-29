@@ -121,7 +121,14 @@ export default function AccessRestricted() {
           <Button
             variant="outline"
             onClick={async () => {
-              await logout();
+              const response = await logout();
+              
+              // Check if this is an OIDC logout redirect (status 204)
+              if (response.status === 204) {
+                // OIDC logout redirect is happening, don't reload
+                return;
+              }
+              
               window.location.reload();
             }}
             className="w-full sm:w-auto"

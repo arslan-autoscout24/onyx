@@ -34,7 +34,13 @@ export const HealthCheckBanner = () => {
   // Handle 403 errors from the /api/me endpoint
   useEffect(() => {
     if (userError && userError.status === 403) {
-      logout().then(() => {
+      logout().then((response) => {
+        // Check if this is an OIDC logout redirect (status 204)
+        if (response.status === 204) {
+          // OIDC logout redirect is happening, don't show modal
+          return;
+        }
+        
         if (!pathname?.includes("/auth")) {
           setShowLoggedOutModal(true);
         }
