@@ -9,6 +9,7 @@ from typing import cast
 import sentry_sdk
 import uvicorn
 from fastapi import APIRouter
+from fastapi import Depends
 from fastapi import FastAPI
 from fastapi import HTTPException
 from fastapi import Request
@@ -18,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from httpx_oauth.clients.google import GoogleOAuth2
+from httpx_oauth.clients.openid import OpenID
 from prometheus_fastapi_instrumentator import Instrumentator
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
@@ -30,6 +32,7 @@ from onyx.auth.schemas import UserUpdate
 from onyx.auth.users import auth_backend
 from onyx.auth.users import create_onyx_oauth_router
 from onyx.auth.users import fastapi_users
+from onyx.db.models import User
 from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.configs.app_configs import APP_HOST
 from onyx.configs.app_configs import APP_PORT
@@ -39,6 +42,9 @@ from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
+from onyx.configs.app_configs import OIDC_CLIENT_ID
+from onyx.configs.app_configs import OIDC_CLIENT_SECRET
+from onyx.configs.app_configs import OIDC_ISSUER
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
 from onyx.configs.app_configs import POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW
@@ -437,10 +443,63 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
             prefix="/auth",
         )
 
+    if AUTH_TYPE == AuthType.OIDC:
+        oidc_client = OpenID(
+            OIDC_CLIENT_ID,
+            OIDC_CLIENT_SECRET,
+            OIDC_ISSUER,
+            name="oidc",
+            base_scopes=["openid", "email", "profile"],
+        )
+        include_auth_router_with_prefix(
+            application,
+            create_onyx_oauth_router(
+                oidc_client,
+                auth_backend,
+                USER_AUTH_SECRET,
+                associate_by_email=True,
+                is_verified_by_default=True,
+                # Points the user back to the login page
+                redirect_url=f"{WEB_DOMAIN}/auth/oidc/callback",
+            ),
+            prefix="/auth/oidc",
+        )
+
+        # Need basic auth router for `logout` endpoint
+        include_auth_router_with_prefix(
+            application,
+            fastapi_users.get_logout_router(auth_backend),
+            prefix="/auth",
+        )
+
+        # Add OIDC-specific logout that redirects to Keycloak logout
+        @application.post("/auth/oidc/logout")
+        async def oidc_logout():
+            from fastapi.responses import RedirectResponse
+            import httpx
+            
+            # Get Keycloak's end session endpoint
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(OIDC_ISSUER)
+                    oidc_config = response.json()
+                    end_session_endpoint = oidc_config.get("end_session_endpoint")
+                    
+                    if end_session_endpoint:
+                        # Redirect to Keycloak logout with post_logout_redirect_uri
+                        logout_url = f"{end_session_endpoint}?post_logout_redirect_uri={WEB_DOMAIN}"
+                        return RedirectResponse(url=logout_url)
+            except Exception as e:
+                logger.warning(f"Failed to get OIDC logout endpoint: {e}")
+            
+            # Fallback: redirect to home page
+            return RedirectResponse(url=WEB_DOMAIN)
+
     if (
         AUTH_TYPE == AuthType.CLOUD
         or AUTH_TYPE == AuthType.BASIC
         or AUTH_TYPE == AuthType.GOOGLE_OAUTH
+        or AUTH_TYPE == AuthType.OIDC
     ):
         # Add refresh token endpoint for OAuth as well
         include_auth_router_with_prefix(

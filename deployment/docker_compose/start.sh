@@ -1,1 +1,4 @@
-docker compose -f docker-compose.dev.yml -p onyx-stack up -d --build --force-recreate
+docker compose \
+    -f docker-compose.dev.yml \
+    -f docker-compose.oauth.yml \
+    -p onyx-stack up -d --build --force-recreate

@@ -133,7 +133,7 @@ def is_user_admin(user: User | None) -> bool:
 
 
 def verify_auth_setting() -> None:
-    if AUTH_TYPE not in [AuthType.DISABLED, AuthType.BASIC, AuthType.GOOGLE_OAUTH]:
+    if AUTH_TYPE not in [AuthType.DISABLED, AuthType.BASIC, AuthType.GOOGLE_OAUTH, AuthType.OIDC, AuthType.SAML]:
         raise ValueError(
             "User must choose a valid user authentication method: "
             "disabled, basic, or google_oauth"
@@ -953,11 +953,50 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
             "/logout", name=f"auth:{backend.name}.logout", responses=logout_responses
         )
         async def logout(
-            user_token: Tuple[models.UP, str] = Depends(get_current_user_token),
+            request: Request,
             strategy: Strategy[models.UP, models.ID] = Depends(backend.get_strategy),
         ) -> Response:
-            user, token = user_token
-            return await backend.logout(strategy, user, token)
+            from onyx.configs.constants import AuthType
+            from onyx.configs.app_configs import AUTH_TYPE, OIDC_ISSUER, WEB_DOMAIN
+            from fastapi.responses import RedirectResponse
+            from fastapi import HTTPException
+            import httpx
+            
+            # Try to get user token, but handle authentication failure gracefully
+            user = None
+            token = None
+            try:
+                user_token = await get_current_user_token(request)
+                user, token = user_token
+            except HTTPException:
+                # User is not authenticated or token is invalid - that's okay for logout
+                pass
+            
+            # If using OIDC, redirect to Keycloak logout
+            if AUTH_TYPE == AuthType.OIDC:
+                try:
+                    async with httpx.AsyncClient() as client:
+                        response = await client.get(OIDC_ISSUER)
+                        oidc_config = response.json()
+                        end_session_endpoint = oidc_config.get("end_session_endpoint")
+                        
+                        if end_session_endpoint:
+                            # Logout locally first if we have a valid user/token
+                            if user and token:
+                                await backend.logout(strategy, user, token)
+                            # Then redirect to Keycloak logout
+                            logout_url = f"{end_session_endpoint}?post_logout_redirect_uri={WEB_DOMAIN}"
+                            return RedirectResponse(url=logout_url)
+                except Exception as e:
+                    logger.warning(f"Failed to get OIDC logout endpoint: {e}")
+            
+            # Regular logout for non-OIDC or if OIDC logout fails
+            if user and token:
+                return await backend.logout(strategy, user, token)
+            else:
+                # If no valid user/token, just return successful logout response
+                from fastapi.responses import Response
+                return Response(status_code=204)
 
         return router
 

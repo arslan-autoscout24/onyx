@@ -104,6 +104,11 @@ OAUTH_CLIENT_SECRET = (
     or ""
 )
 
+# OIDC Configuration
+OIDC_CLIENT_ID = OAUTH_CLIENT_ID
+OIDC_CLIENT_SECRET = OAUTH_CLIENT_SECRET
+OIDC_ISSUER = os.environ.get("OIDC_WELL_KNOWN_URL", os.environ.get("OPENID_CONFIG_URL", ""))
+
 # Okta JWT Token Parsing Configuration
 OKTA_GROUPS_CLAIM = os.environ.get("OKTA_GROUPS_CLAIM", "groups")
 OKTA_DEFAULT_PERMISSION = os.environ.get("OKTA_DEFAULT_PERMISSION", "read")

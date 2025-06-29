@@ -251,10 +251,11 @@ class OAuthPermission(Base):
     user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
     permission_level: Mapped[PermissionLevel] = mapped_column(Enum(PermissionLevel, native_enum=False), nullable=False)
     granted_by: Mapped[str] = mapped_column(String(50), nullable=False)  # 'okta_groups', 'manual', etc.
-    okta_groups: Mapped[list[str] | None] = mapped_column(postgresql.JSONB(), nullable=True)  # List of Okta groups
+    okta_groups: Mapped[str | None] = mapped_column(String, nullable=True)  # Comma-separated Okta groups
     granted_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
-    source: Mapped[str] = mapped_column(String(50), default="okta", nullable=False)  # 'okta', 'manual', 'import'
+    # TODO: Add updated_at and source columns via migration
+    # updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    # source: Mapped[str] = mapped_column(String(50), default="okta", nullable=False)  # 'okta', 'manual', 'import'
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     
     # Relationship to User table

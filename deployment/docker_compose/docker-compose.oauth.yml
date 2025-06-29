@@ -1,21 +1,62 @@
-version: '3.8'
-
 services:
-  backend:
+  background:
+    extra_hosts:
+      - "localhost:host-gateway"
     environment:
       # OAuth Configuration
-      - OKTA_DOMAIN=${OKTA_DOMAIN}
-      - OKTA_CLIENT_ID=${OKTA_CLIENT_ID}
-      - OKTA_CLIENT_SECRET=${OKTA_CLIENT_SECRET}
-      - OKTA_GROUPS_CLAIM=${OKTA_GROUPS_CLAIM:-groups}
-      - OIDC_WELL_KNOWN_URL=https://${OKTA_DOMAIN}/oauth2/default/.well-known/openid-configuration
+      - OKTA_DOMAIN=http://localhost:8089/realms/demo
+      - OKTA_CLIENT_ID=onyx
+      - OKTA_CLIENT_SECRET=I4QO6ZoA0DNoTHni8sdpeb5WImZEtEhv
+      - OAUTH_CLIENT_ID=onyx
+      - OAUTH_CLIENT_SECRET=I4QO6ZoA0DNoTHni8sdpeb5WImZEtEhv
+      - OKTA_GROUPS_CLAIM=groups
+      - OIDC_WELL_KNOWN_URL=http://localhost:8089/realms/demo/.well-known/openid-configuration
       
       # Permission Settings
-      - OAUTH_PERMISSIONS_ENABLED=${OAUTH_PERMISSIONS_ENABLED:-true}
-      - OAUTH_PERMISSION_ENFORCEMENT=${OAUTH_PERMISSION_ENFORCEMENT:-true}
-      - OKTA_GROUP_PROCESSING=${OKTA_GROUP_PROCESSING:-true}
+      - OAUTH_PERMISSIONS_ENABLED=true
+      - OAUTH_PERMISSION_ENFORCEMENT=true
+      - OKTA_GROUP_PROCESSING=true
       
       # Group Mappings
-      - OKTA_ADMIN_GROUP=${OKTA_ADMIN_GROUP:-Onyx-Admins}
-      - OKTA_WRITE_GROUP=${OKTA_WRITE_GROUP:-Onyx-Writers}
-      - OKTA_READ_GROUP=${OKTA_READ_GROUP:-Onyx-Readers}
+      - OKTA_ADMIN_GROUP=Onyx-Admins
+      - OKTA_WRITE_GROUP=Onyx-Writers
+      - OKTA_READ_GROUP=Onyx-Readers
+      
+      # Authentication Type - CRITICAL
+      - AUTH_TYPE=oidc
+
+  api_server:
+    extra_hosts:
+      - "localhost:host-gateway"
+    environment:
+      # OAuth Configuration
+      - OKTA_DOMAIN=http://localhost:8089/realms/demo
+      - OKTA_CLIENT_ID=onyx
+      - OKTA_CLIENT_SECRET=I4QO6ZoA0DNoTHni8sdpeb5WImZEtEhv
+      - OAUTH_CLIENT_ID=onyx
+      - OAUTH_CLIENT_SECRET=I4QO6ZoA0DNoTHni8sdpeb5WImZEtEhv
+      - OKTA_GROUPS_CLAIM=groups
+      - OIDC_WELL_KNOWN_URL=http://localhost:8089/realms/demo/.well-known/openid-configuration
+      
+      # Permission Settings
+      - OAUTH_PERMISSIONS_ENABLED=true
+      - OAUTH_PERMISSION_ENFORCEMENT=true
+      - OKTA_GROUP_PROCESSING=true
+      
+      # Group Mappings
+      - OKTA_ADMIN_GROUP=Onyx-Admins
+      - OKTA_WRITE_GROUP=Onyx-Writers
+      - OKTA_READ_GROUP=Onyx-Readers
+      
+      # Security Settings
+      - OKTA_TOKEN_VALIDATION_STRICT=true
+      - OKTA_GROUP_CLAIM_REQUIRED=true
+      
+      # Authentication Type - CRITICAL
+      - AUTH_TYPE=oidc
+      
+
+
+  web_server:
+    environment:
+      - AUTH_TYPE=oidc

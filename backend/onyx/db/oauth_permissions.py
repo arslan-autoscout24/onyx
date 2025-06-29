@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from onyx.db.models import OAuthPermission, User
-from onyx.db.engine import get_async_session
+from onyx.db.engine import get_async_session_context_manager
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ async def get_user_oauth_permission(
     if session:
         return await _get_permission(session)
     else:
-        async with get_async_session() as db_session:
+        async with get_async_session_context_manager() as db_session:
             return await _get_permission(db_session)
 
 
@@ -143,7 +143,7 @@ async def update_user_oauth_permission(
     if session:
         return await _update_permission(session)
     else:
-        async with get_async_session() as db_session:
+        async with get_async_session_context_manager() as db_session:
             return await _update_permission(db_session)
 
 
@@ -174,7 +174,7 @@ async def deactivate_user_oauth_permissions(
     if session:
         await _deactivate_permissions(session)
     else:
-        async with get_async_session() as db_session:
+        async with get_async_session_context_manager() as db_session:
             await _deactivate_permissions(db_session)
 
 
@@ -215,7 +215,7 @@ async def get_users_by_permission_level(
     if session:
         return await _get_users(session)
     else:
-        async with get_async_session() as db_session:
+        async with get_async_session_context_manager() as db_session:
             return await _get_users(db_session)
 
 
@@ -295,7 +295,7 @@ async def bulk_update_permissions(
     if session:
         return await _bulk_update(session)
     else:
-        async with get_async_session() as db_session:
+        async with get_async_session_context_manager() as db_session:
             return await _bulk_update(db_session)
 
 
