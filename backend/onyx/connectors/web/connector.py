@@ -527,7 +527,32 @@ class WebConnector(LoadConnector):
 
             return result
 
+        # Set session cookie for authentication to docs.services.as24.tech
+        if 'docs.services.as24.tech' in initial_url:
+            from urllib.parse import urlparse
+            domain = urlparse(initial_url).netloc
+            
+            # Session JWT token for authentication
+            session_jwt = 'eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJpZFRva2VuIjoiZXlKcmFXUWlPaUpNVW5ZMlRWRk1WbnB5ZWt4c2FYTnFXbTE1ZFVWTlYyTkdlRGhPYVVsaVp6bDJObGxITUZCYWRFTlpJaXdpWVd4bElqb2lVbE15TlRZaWZRLmV5SnpkV0lpT2lJd01IVnpZWE14WVhaVk9HZDFWbGhQUVRReE5pSXNJblpsY2lJNk1Td2lhWE56SWpvaWFIUjBjSE02THk5emMyOHVZWFYwYjNOamIzVjBNalF1WTI5dEwyOWhkWFJvTWk5a1pXWmhkV3gwSWl3aVlYVmtJam9pV2taUFdrVnFaMUZOWmpjMFF6bFFXSFpTYVZoaVQwNUdURkExWTA5T01YUWlMQ0pwWVhRaU9qRTNOVEV5TmpnNU5qY3NJbVY0Y0NJNk1UYzFNVEkzTWpVMk55d2lhblJwSWpvaVNVUXVTSGhEVUhOdmVqTjZWRjlRUjJ0eFZreDRNM2QxVUdaaWJqTnlTMVJsVW1ob1dsZHhTRlJPUlZKa1ZTSXNJbUZ0Y2lJNld5SndhSElpTENKdmEzUmhYM1psY21sbWVTSmRMQ0pwWkhBaU9pSXdNRzlwTkRkeFpuQkZTWGhzU1RaM1lqUXhOaUlzSW1GMWRHaGZkR2x0WlNJNk1UYzFNVEkyT0RrMk5pd2lZWFJmYUdGemFDSTZJamh5V2xSQ05tWlNjSFZFVTJjeVVUZFJlR3RqV1hkaWZRLnM0ejA3SFFCUHBHYUZjY0tERTdmZ1I0bGl2OTl1TTRLUTNUd0JLbWtocDRDczdELTUzektfRERZY3RsaE1UanQyWTItbFlDdDFCLWgwTDZkdjJ1TFJIQTlJazFsSmhPck9jQm13RWYtRU85SzR6bmwyN01vZXRMMF80TFBFUXRvVS1xeUVJWUg0TTJSUDd2Tm5hbE9Lb05hSkZvRFA0WTlJeEViTnZKRlJKTngxV0VuTXBySk1sTHh4UldnUUcxYXZWaXdiV2hOUngya0I5SUZMSS1PZUFBQzVBX3ZoeTNsWDlIYVBGdnNTTjZKaWVkTnY0T0psM0RmY1lwandkVy14YjlnaXMtNEUyNjVrWjRTdkx2Nk1jUHhCd2k3Wk1WSGsxQnlhdXhYZ3YtaE9tX2dfVm1FRkZFZkdRVXpXbTNzTXBDR2Z1eVgxN1BiSHQ1cXNzbnYtdyIsInJlZnJlc2hUb2tlbiI6IiIsImlhdCI6MTc1MTI2ODk2NywiZXhwIjoxNzUxMjkwNTY3fQ.uetV8g7HeuJIhdY8TACiJAfYLYPh_9raDeSxnBuyy_VckCFhmiZVeMQJsPazBUDHmaDkzgiKxRj46mnu0AsRyA'
+            
+            # Set session cookie
+            session_cookie = {
+                "name": "session",
+                "value": session_jwt,
+                "domain": domain,
+                "path": "/",
+                "httpOnly": False,
+                "secure": initial_url.startswith('https')
+            }
+            
+            try:
+                session_ctx.playwright_context.add_cookies([session_cookie])
+                logger.info(f"Set session cookie for authenticated access to {domain}")
+            except Exception as e:
+                logger.error(f"Failed to set session cookie: {e}")
+        
         page = session_ctx.playwright_context.new_page()
+        
         try:
             # Can't use wait_until="networkidle" because it interferes with the scrolling behavior
             page_response = page.goto(

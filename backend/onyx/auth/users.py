@@ -529,13 +529,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             if token:
                 CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
-            # Process Okta groups for OIDC provider only (Story 2.1 Enhancement)
+            # Process Okta groups for OIDC provider only
             if (OAUTH_PERMISSIONS_ENABLED and OKTA_GROUP_PROCESSING_ENABLED and 
                 oauth_name == 'oidc' and access_token):
-                logger.info(f"Processing Okta groups for user {user.id}")
                 await self._process_okta_groups(user, access_token)
-            else:
-                logger.debug(f"Skipping group processing for provider: {oauth_name}")
 
             return user
 
@@ -551,10 +548,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             # Parse token and extract permission level
             permission_level, okta_groups = parse_okta_token_for_permissions(access_token)
             
-            logger.info(
-                f"Extracted permission '{permission_level}' from groups {okta_groups} for user {user.id}"
-            )
-            
             # Update user's OAuth permissions in database
             await update_user_oauth_permission(
                 user_id=user.id,
@@ -562,8 +555,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 okta_groups=okta_groups,
                 granted_by="okta_groups"
             )
-            
-            logger.info(f"Successfully updated OAuth permissions for user {user.id}")
             
         except Exception as e:
             logger.error(f"Failed to process Okta groups for user {user.id}: {str(e)}")
@@ -585,7 +576,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     domain=None,
                     secure=WEB_DOMAIN.startswith("https"),
                 )
-                logger.debug(f"Deleted anonymous user cookie for user {user.email}")
+
         except Exception:
             logger.exception("Error deleting anonymous user cookie")
 
@@ -604,7 +595,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         try:
             user_count = await get_user_count()
-            logger.debug(f"Current tenant user count: {user_count}")
 
             with get_session_with_tenant(tenant_id=tenant_id) as db_session:
                 if user_count == 1:
@@ -626,7 +616,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
-        logger.debug(f"User {user.id} has registered.")
+
         optional_telemetry(
             record_type=RecordType.SIGN_UP,
             data={"action": "create"},
@@ -957,134 +947,73 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
             user_token: tuple[models.UP, str] = Depends(get_current_user_token),
             strategy: Strategy[models.UP, models.ID] = Depends(backend.get_strategy),
         ) -> Response:
+            import httpx
+            import traceback
             from onyx.configs.constants import AuthType
             from onyx.configs.app_configs import AUTH_TYPE, OIDC_ISSUER, WEB_DOMAIN, OIDC_CLIENT_ID
-            from fastapi.responses import RedirectResponse
-            from fastapi import HTTPException
-            import httpx
-            
-            logger.info(f" LOGOUT DEBUG: Starting logout process")
-            logger.info(f" LOGOUT DEBUG: AUTH_TYPE = {AUTH_TYPE}")
-            logger.info(f" LOGOUT DEBUG: OIDC_ISSUER = {OIDC_ISSUER}")
-            logger.info(f" LOGOUT DEBUG: WEB_DOMAIN = {WEB_DOMAIN}")
-            logger.info(f" LOGOUT DEBUG: Request URL = {request.url}")
-            logger.info(f" LOGOUT DEBUG: Request Headers = {dict(request.headers)}")
             
             # Extract user and token from the injected dependency
             user, token = user_token if user_token else (None, None)
-            logger.info(f" LOGOUT DEBUG: User: {user.id if user else None}, Token available: {bool(token)}")
             
             # If using OIDC, handle logout based on session state
             if AUTH_TYPE == AuthType.OIDC:
-                logger.info(f" LOGOUT DEBUG: OIDC auth type detected, checking session state")
-                
                 # If no valid user/token, user is already logged out locally
                 if not user or not token:
-                    logger.info(f" LOGOUT DEBUG: No valid user/token found, user already logged out locally")
-                    # Return successful logout response - no need to redirect to Keycloak
-                    from fastapi.responses import Response
                     return Response(status_code=200)
                 
                 # User has valid session, perform both local and Keycloak logout
-                logger.info(f" LOGOUT DEBUG: Valid user session found, performing complete OIDC logout for user {user.id}")
                 try:
-                    logger.info(f" LOGOUT DEBUG: Fetching OIDC config from: {OIDC_ISSUER}")
                     async with httpx.AsyncClient() as client:
                         response = await client.get(OIDC_ISSUER)
-                        logger.info(f" LOGOUT DEBUG: OIDC config response status: {response.status_code}")
                         
                         if response.status_code != 200:
-                            logger.error(f" LOGOUT DEBUG: Failed to fetch OIDC config, status: {response.status_code}")
-                            # Fall back to local logout only
-                            local_logout_result = await backend.logout(strategy, user, token)
-                            from fastapi.responses import Response
+                            logger.error(f"Failed to fetch OIDC config, status: {response.status_code}")
+                            await backend.logout(strategy, user, token)
                             return Response(status_code=200)
                         
                         oidc_config = response.json()
                         end_session_endpoint = oidc_config.get("end_session_endpoint")
-                        logger.info(f" LOGOUT DEBUG: end_session_endpoint = {end_session_endpoint}")
                         
                         if end_session_endpoint:
                             # Logout locally first
                             try:
-                                logger.info(f" LOGOUT DEBUG: Performing local logout for user {user.id}")
-                                local_logout_result = await backend.logout(strategy, user, token)
-                                logger.info(f" LOGOUT DEBUG: Local logout result: {local_logout_result}")
+                                await backend.logout(strategy, user, token)
                             except Exception as logout_error:
-                                logger.error(f" LOGOUT DEBUG: Error during local logout: {logout_error}")
+                                logger.error(f"Error during local logout: {logout_error}")
                                 # Continue with OIDC logout even if local logout fails
                             
-                            # Redirect to Keycloak logout to clear SSO session
                             # Try to get ID token from user's OAuth accounts for proper session termination
                             id_token_hint = None
-                            logger.info(f" LOGOUT DEBUG: User has oauth_accounts: {hasattr(user, 'oauth_accounts')}")
                             if hasattr(user, 'oauth_accounts') and user.oauth_accounts:
-                                logger.info(f" LOGOUT DEBUG: Found {len(user.oauth_accounts)} oauth accounts")
                                 for oauth_account in user.oauth_accounts:
-                                    logger.info(f" LOGOUT DEBUG: OAuth account name: {oauth_account.oauth_name}")
-                                    # Try both 'oidc' and 'onyx' as oauth names
                                     if oauth_account.oauth_name in ['oidc', 'onyx', 'keycloak']:
-                                        logger.info(f" LOGOUT DEBUG: Found matching oauth account: {oauth_account.oauth_name}")
-                                        # In OIDC, the access_token might contain or be the ID token
                                         if oauth_account.access_token:
-                                            # Log first and last few chars for debugging
-                                            token_preview = f"{oauth_account.access_token[:20]}...{oauth_account.access_token[-10:]}"
-                                            logger.info(f" LOGOUT DEBUG: Using access_token as id_token_hint: {token_preview}")
                                             id_token_hint = oauth_account.access_token
                                         break
-                            else:
-                                logger.info(f" LOGOUT DEBUG: No oauth_accounts found on user")
                             
                             # Use a logout success page to prevent auto-login
                             logout_success_url = f"{WEB_DOMAIN}/auth/login?disableAutoRedirect=true&logout=success"
                             
                             if id_token_hint:
                                 logout_url = f"{end_session_endpoint}?client_id={OIDC_CLIENT_ID}&post_logout_redirect_uri={logout_success_url}&id_token_hint={id_token_hint}"
-                                logger.info(f" LOGOUT DEBUG: Using id_token_hint for session termination")
                             else:
-                                # Fallback: No post_logout_redirect_uri to force Keycloak logout confirmation
                                 logout_url = f"{end_session_endpoint}?client_id={OIDC_CLIENT_ID}"
-                                logger.info(f" LOGOUT DEBUG: No id_token_hint available, using fallback logout URL")
                             
-                            logger.info(f" LOGOUT DEBUG: Redirecting to OIDC logout URL: {logout_url}")
-                            
-                            # Test: Make a direct request to the logout URL to see if it works
-                            try:
-                                logger.info(f" LOGOUT DEBUG: Testing logout URL accessibility...")
-                                async with httpx.AsyncClient() as client:
-                                    test_response = await client.get(logout_url)
-                                    logger.info(f" LOGOUT DEBUG: Logout URL test response status: {test_response.status_code}")
-                                    logger.info(f" LOGOUT DEBUG: Logout URL test response headers: {dict(test_response.headers)}")
-                            except Exception as test_error:
-                                logger.error(f" LOGOUT DEBUG: Error testing logout URL: {test_error}")
-                            
-                            redirect_response = RedirectResponse(url=logout_url)
-                            logger.info(f" LOGOUT DEBUG: Created redirect response with status {redirect_response.status_code}")
-                            return redirect_response
+                            return RedirectResponse(url=logout_url)
                         else:
-                            logger.error(f" LOGOUT DEBUG: No end_session_endpoint found in OIDC config")
-                            # Fall back to local logout only
-                            local_logout_result = await backend.logout(strategy, user, token)
-                            from fastapi.responses import Response
+                            logger.error("No end_session_endpoint found in OIDC config")
+                            await backend.logout(strategy, user, token)
                             return Response(status_code=200)
                             
                 except Exception as e:
-                    logger.error(f" LOGOUT DEBUG: Failed to get OIDC logout endpoint: {type(e).__name__}: {e}")
-                    import traceback
-                    logger.error(f" LOGOUT DEBUG: Traceback: {traceback.format_exc()}")
-            else:
-                logger.info(f" LOGOUT DEBUG: Non-OIDC auth type ({AUTH_TYPE}), performing regular logout")
+                    logger.error(f"Failed to get OIDC logout endpoint: {type(e).__name__}: {e}")
+                    logger.error(f"Traceback: {traceback.format_exc()}")
             
             # Regular logout for non-OIDC or if OIDC logout fails
             if user and token:
-                logger.info(f" LOGOUT DEBUG: Performing regular logout for user {user.id}")
                 result = await backend.logout(strategy, user, token)
-                logger.info(f" LOGOUT DEBUG: Regular logout result: {result}")
                 return result
             else:
-                # If no valid user/token, just return successful logout response
-                logger.info(f" LOGOUT DEBUG: No user/token, returning 204 response")
-                from fastapi.responses import Response
                 return Response(status_code=204)
 
         return router
