@@ -144,9 +144,6 @@ OKTA_GROUP_PROCESSING_ENABLED=true   # Enable group-to-role mapping
 ```bash
 # Test OIDC configuration
 python backend/test_oidc_config.py
-
-# Validate OAuth setup
-python backend/scripts/validate_oauth_config.py
 ```
 
 

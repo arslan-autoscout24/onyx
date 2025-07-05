@@ -1,28 +1,12 @@
-# OAuth Configuration Scripts
+# Backend Scripts
 
-This directory contains scripts for configuring and validating OAuth/Okta integration.
+This directory contains utility scripts for the Onyx backend.
 
 ## Scripts
 
-### `validate_oauth_config.py`
-Validates the OAuth/Okta configuration including:
-- Environment variables
-- Okta domain accessibility
-- OIDC configuration
-- Group mappings
+*Note: OAuth configuration scripts have been removed as part of the simplification to a minimal admin/user role-based OIDC system.*
 
-**Usage:**
-```bash
-python scripts/validate_oauth_config.py
-```
-
-### `test_jwt_parsing.py`
-Tests JWT token parsing and group extraction logic.
-
-**Usage:**
-```bash
-python scripts/test_jwt_parsing.py
-```
+For OIDC setup, refer to the main README.md file.
 
 ## Prerequisites
 
