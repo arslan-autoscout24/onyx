@@ -15,7 +15,7 @@ from onyx.auth.users import (
     current_user_with_expired_token,
 )
 from onyx.db.models import User
-from onyx.db.oauth_permissions import get_user_permission_level
+from onyx.auth.schemas import UserRole
 from onyx.redis.redis_pool import get_redis_client
 from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -56,21 +56,13 @@ async def get_oauth_permission(user: User = Depends(current_user)) -> str:
             logger.debug(f"Cache hit for user {user.id}: {permission_data['level']}")
             return permission_data['level']
         
-        # Cache miss - fetch from database
-        permission_level = await get_user_permission_level(user.id)
+        # Simplified permission check - use user.role directly
+        if user.role == UserRole.ADMIN:
+            permission_level = "admin"
+        else:
+            permission_level = "user"  # Basic user permissions
         
-        # Cache the result
-        permission_data = {
-            "level": permission_level,
-            "cached_at": datetime.utcnow().isoformat()
-        }
-        await redis_client.setex(
-            cache_key, 
-            PERMISSION_CACHE_TTL, 
-            json.dumps(permission_data)
-        )
-        
-        logger.debug(f"Database hit for user {user.id}: {permission_level}")
+        logger.debug(f"Simplified permission for user {user.id}: {permission_level}")
         return permission_level
         
     except Exception as e:

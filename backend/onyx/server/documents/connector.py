@@ -23,7 +23,7 @@ from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
 from onyx.server.auth_check import require_admin
-from onyx.auth.admin_audit import log_admin_action, AdminActions, ResourceTypes
+# Admin audit functionality removed - simplified approach
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import ENABLED_CONNECTOR_TYPES
 from onyx.configs.app_configs import MOCK_CONNECTOR_FILE_PATH
@@ -925,19 +925,7 @@ def create_connector_from_model(
             db_session=db_session,
         )
         
-        # Log admin audit action
-        log_admin_action(
-            db_session=db_session,
-            admin_user=user,
-            action=AdminActions.CREATE_CONNECTOR,
-            resource_type=ResourceTypes.CONNECTOR,
-            resource_id=str(connector_response.id),
-            details={
-                "connector_name": connector_data.name,
-                "connector_source": connector_data.source.value,
-                "access_type": connector_data.access_type.value if connector_data.access_type else None,
-            }
-        )
+        # Admin audit logging removed - simplified approach
 
         return connector_response
     except ValueError as e:
@@ -1088,15 +1076,7 @@ def delete_connector_by_id(
                 connector_id=connector_id,
             )
             
-            # Log admin audit action
-            log_admin_action(
-                db_session=db_session,
-                admin_user=user,
-                action=AdminActions.DELETE_CONNECTOR,
-                resource_type=ResourceTypes.CONNECTOR,
-                resource_id=str(connector_id),
-                details={"connector_id": connector_id}
-            )
+            # Admin audit logging removed - simplified approach
             
             return result
     except AssertionError:

@@ -16,15 +16,13 @@ class OAuthSettings(BaseSettings):
     okta_issuer: HttpUrl
     oidc_well_known_url: HttpUrl
     
-    # Feature Flags
-    oauth_permissions_enabled: bool = False
-    oauth_permission_enforcement: bool = False
-    okta_group_processing: bool = False
+    # Feature Flags - simplified
+    oauth_permissions_enabled: bool = False  # Not used in simplified version
+    oauth_permission_enforcement: bool = False  # Not used in simplified version
+    okta_group_processing: bool = True  # Simplified group processing
     
-    # Group Mappings
-    okta_admin_group: str = "Onyx-Admins"
-    okta_write_group: str = "Onyx-Writers"
-    okta_read_group: str = "Onyx-Readers"
+    # Group Mappings - simplified to just admin vs user
+    okta_admin_groups: str = "Onyx-Admins"  # Comma-separated admin groups
     
     # Security Settings
     okta_token_validation_strict: bool = True
@@ -58,13 +56,9 @@ class OAuthSettings(BaseSettings):
                 raise ValueError('OIDC well-known URL must match Okta domain')
         return v
 
-    def get_group_permission_mapping(self) -> dict:
-        """Get mapping of Okta groups to permission levels."""
-        return {
-            self.okta_admin_group: "admin",
-            self.okta_write_group: "write", 
-            self.okta_read_group: "read"
-        }
+    def get_admin_groups(self) -> list[str]:
+        """Get list of admin groups for simplified role mapping."""
+        return [group.strip() for group in self.okta_admin_groups.split(",")]
 
 
 # Global settings instance - will be None if environment is not configured

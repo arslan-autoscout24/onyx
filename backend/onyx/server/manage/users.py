@@ -33,7 +33,7 @@ from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
 from onyx.auth.users import optional_user
 from onyx.server.auth_check import require_admin
-from onyx.auth.admin_audit import log_admin_action, AdminActions, ResourceTypes
+# Admin audit functionality removed - simplified approach
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import AuthBackend
@@ -415,18 +415,7 @@ def deactivate_user(
     db_session.add(user_to_deactivate)
     db_session.commit()
     
-    # Log admin audit action
-    log_admin_action(
-        db_session=db_session,
-        admin_user=admin_user,
-        action=AdminActions.DEACTIVATE_USER,
-        resource_type=ResourceTypes.USER,
-        resource_id=str(user_to_deactivate.id),
-        details={
-            "deactivated_user_email": user_to_deactivate.email,
-            "deactivated_user_id": str(user_to_deactivate.id)
-        }
-    )
+    # Admin audit logging removed - simplified approach
 
 
 @router.delete("/manage/admin/delete-user")

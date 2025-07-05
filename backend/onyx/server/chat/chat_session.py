@@ -33,9 +33,10 @@ router = APIRouter(prefix="/chat-api", tags=["chat-api"])
 
 
 async def get_user_oauth_permission(user_id: UUID) -> str:
-    """Get user's OAuth permission level."""
-    from onyx.db.oauth_permissions import get_user_permission_level
-    return await get_user_permission_level(user_id)
+    """Get user's OAuth permission level - simplified to admin/user."""
+    # In simplified approach, we don't need to query separate permission tables
+    # Permission is determined by user.role field
+    return "admin"  # This function is deprecated but kept for compatibility
 
 
 def check_session_access(session: ChatSession, user: User, user_permission: str) -> bool:

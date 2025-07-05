@@ -223,9 +223,6 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     )
     files: Mapped[list["UserFile"]] = relationship("UserFile", back_populates="user")
 
-    # OAuth permissions granted through external providers like Okta
-    oauth_permissions: Mapped[list["OAuthPermission"]] = relationship("OAuthPermission", back_populates="user", cascade="all, delete-orphan")
-
     @validates("email")
     def validate_email(self, key: str, value: str) -> str:
         return value.lower() if value else value
@@ -237,87 +234,6 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         """
         return not bool(self.oauth_accounts)
 
-
-class OAuthPermission(Base):
-    """
-    Track OAuth-granted permissions from Okta groups.
-    
-    This table stores permissions granted to users through OAuth providers
-    (primarily Okta) based on their group memberships.
-    """
-    __tablename__ = "oauth_permission"
-    
-    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
-    user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
-    permission_level: Mapped[PermissionLevel] = mapped_column(Enum(PermissionLevel, native_enum=False), nullable=False)
-    granted_by: Mapped[str] = mapped_column(String(50), nullable=False)  # 'okta_groups', 'manual', etc.
-    okta_groups: Mapped[str | None] = mapped_column(String, nullable=True)  # Comma-separated Okta groups
-    granted_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    # TODO: Add updated_at and source columns via migration
-    # updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
-    # source: Mapped[str] = mapped_column(String(50), default="okta", nullable=False)  # 'okta', 'manual', 'import'
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    
-    # Relationship to User table
-    user: Mapped["User"] = relationship("User", back_populates="oauth_permissions")
-
-    def __init__(self, **kwargs):
-        # Set defaults for object creation
-        if 'id' not in kwargs:
-            kwargs['id'] = uuid4()
-        if 'granted_at' not in kwargs:
-            kwargs['granted_at'] = datetime.datetime.now(datetime.timezone.utc)
-        if 'is_active' not in kwargs:
-            kwargs['is_active'] = True
-        super().__init__(**kwargs)
-
-    def __repr__(self) -> str:
-        return f"<OAuthPermission(user_id={self.user_id}, level={self.permission_level})>"
-
-
-class PermissionHistory(Base):
-    """Track permission changes for audit purposes."""
-    __tablename__ = "permission_history"
-    
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
-    previous_level: Mapped[PermissionLevel | None] = mapped_column(Enum(PermissionLevel, native_enum=False), nullable=True)
-    new_level: Mapped[PermissionLevel] = mapped_column(Enum(PermissionLevel, native_enum=False), nullable=False)
-    changed_by: Mapped[UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
-    changed_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    reason: Mapped[str] = mapped_column(String(500), nullable=False)
-    okta_groups_before: Mapped[list[str] | None] = mapped_column(postgresql.JSONB(), nullable=True)
-    okta_groups_after: Mapped[list[str] | None] = mapped_column(postgresql.JSONB(), nullable=True)
-    source: Mapped[str] = mapped_column(String(50), default="manual", nullable=False)  # 'okta', 'manual', 'import'
-    
-    # Relationships
-    user: Mapped["User"] = relationship("User", foreign_keys=[user_id])
-    changed_by_user: Mapped["User"] = relationship("User", foreign_keys=[changed_by])
-
-
-class AdminAuditLog(Base):
-    """
-    Audit log for administrative operations.
-    
-    This table records all admin-level operations for security and compliance.
-    """
-    __tablename__ = "admin_audit_log"
-    
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    admin_user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
-    action: Mapped[str] = mapped_column(String(100), nullable=False)
-    resource_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    resource_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    details: Mapped[dict | None] = mapped_column(postgresql.JSON(), nullable=True)
-    timestamp: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
-    user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    
-    # Relationship to User table
-    admin_user: Mapped["User"] = relationship("User", foreign_keys=[admin_user_id])
-    
-    def __repr__(self) -> str:
-        return f"<AdminAuditLog(admin_user_id={self.admin_user_id}, action={self.action})>"
 
 
 class AccessToken(SQLAlchemyBaseAccessTokenTableUUID, Base):
@@ -3196,40 +3112,6 @@ class UserFolder(Base):
         "Persona",
         secondary=Persona__UserFolder.__table__,
         back_populates="user_folders",
-    )
-
-
-# User Document Model for CRUD operations (separate from search-focused Document model)
-class UserDocument(Base):
-    __tablename__ = "user_document"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    is_public: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    
-    # User relationships
-    created_by: Mapped[UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
-    updated_by: Mapped[UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
-    
-    # Timestamps
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=func.now()
-    )
-    updated_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=func.now(), onupdate=func.now()
-    )
-    
-    # Relationships
-    creator: Mapped["User"] = relationship("User", foreign_keys=[created_by])
-    updater: Mapped["User"] = relationship("User", foreign_keys=[updated_by])
-    
-    # Indexes for performance
-    __table_args__ = (
-        Index("ix_user_document_created_by", "created_by"),
-        Index("ix_user_document_is_public", "is_public"),
-        Index("ix_user_document_created_at", "created_at"),
-        Index("ix_user_document_title", "title"),
     )
 
 

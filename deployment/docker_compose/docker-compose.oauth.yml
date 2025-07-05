@@ -12,15 +12,13 @@ services:
       - OKTA_GROUPS_CLAIM=groups
       - OIDC_WELL_KNOWN_URL=http://localhost:8089/realms/demo/.well-known/openid-configuration
       
-      # Permission Settings
-      - OAUTH_PERMISSIONS_ENABLED=true
-      - OAUTH_PERMISSION_ENFORCEMENT=true
+      # Permission Settings - Simplified
+      - OAUTH_PERMISSIONS_ENABLED=false
+      - OAUTH_PERMISSION_ENFORCEMENT=false
       - OKTA_GROUP_PROCESSING=true
       
-      # Group Mappings
-      - OKTA_ADMIN_GROUP=Onyx-Admins
-      - OKTA_WRITE_GROUP=Onyx-Writers
-      - OKTA_READ_GROUP=Onyx-Readers
+      # Group Mappings - Simplified to admin groups only
+      - OKTA_ADMIN_GROUPS=Onyx-Admins
       
       # Authentication Type - CRITICAL
       - AUTH_TYPE=oidc
@@ -38,15 +36,13 @@ services:
       - OKTA_GROUPS_CLAIM=groups
       - OIDC_WELL_KNOWN_URL=http://localhost:8089/realms/demo/.well-known/openid-configuration
       
-      # Permission Settings
-      - OAUTH_PERMISSIONS_ENABLED=true
-      - OAUTH_PERMISSION_ENFORCEMENT=true
+      # Permission Settings - Simplified
+      - OAUTH_PERMISSIONS_ENABLED=false
+      - OAUTH_PERMISSION_ENFORCEMENT=false
       - OKTA_GROUP_PROCESSING=true
       
-      # Group Mappings
-      - OKTA_ADMIN_GROUP=Onyx-Admins
-      - OKTA_WRITE_GROUP=Onyx-Writers
-      - OKTA_READ_GROUP=Onyx-Readers
+      # Group Mappings - Simplified to admin groups only
+      - OKTA_ADMIN_GROUPS=Onyx-Admins
       
       # Security Settings
       - OKTA_TOKEN_VALIDATION_STRICT=true
