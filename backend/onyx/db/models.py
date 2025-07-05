@@ -64,7 +64,6 @@ from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
-from onyx.db.enums import PermissionLevel
 from onyx.db.enums import TaskStatus
 from onyx.db.pydantic_type import PydanticType
 from onyx.utils.logger import setup_logger

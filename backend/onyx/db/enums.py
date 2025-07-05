@@ -108,8 +108,4 @@ class EmbeddingPrecision(str, PyEnum):
     FLOAT = "float"
 
 
-class PermissionLevel(str, PyEnum):
-    """OAuth permission levels for user authorization."""
-    READ = "read"
-    WRITE = "write"
-    ADMIN = "admin"
+
