@@ -63,6 +63,93 @@ We also have built-in support for high-availability/scalable deployment on Kuber
 References [here](https://github.com/onyx-dot-app/onyx/tree/main/deployment).
 
 
+## 🔐 OIDC Authentication Setup (Okta)
+
+Onyx supports OIDC authentication with a simplified admin/user role system. Here's how to set it up with Okta:
+
+### Prerequisites
+- Okta Administrator access
+- Onyx application domain/URL
+- Understanding of OIDC/OAuth 2.0 flow
+
+### Step 1: Create Okta Application
+
+1. **Login to Okta Admin Console**
+   - Navigate to your Okta org: `https://your-org.okta.com`
+   - Login with admin credentials
+
+2. **Create New Application**
+   - Go to Applications > Applications
+   - Click "Create App Integration"
+   - Select "OIDC - OpenID Connect"
+   - Select "Web Application"
+
+3. **Configure Application Settings**
+   ```
+   App integration name: Onyx Knowledge Platform
+   Grant type: Authorization Code
+   Sign-in redirect URIs: 
+     - http://localhost:3000/auth/callback (development)
+     - https://your-domain.com/auth/callback (production)
+   Sign-out redirect URIs:
+     - http://localhost:3000/ (development) 
+     - https://your-domain.com/ (production)
+   ```
+
+### Step 2: Configure Groups (Simplified)
+
+Onyx uses a simplified role system with only two roles: **Admin** and **User**.
+
+- **Onyx-Admins Group**: Administrative access → `ADMIN` role in Onyx
+- **Default Users**: All other users → `BASIC` role in Onyx
+
+### Step 3: Configure Claims
+
+1. Go to **Security > API > Authorization Servers**
+2. Select **"default" authorization server**
+3. Add **Groups Claim**:
+   ```
+   Name: groups
+   Include in token type: ID Token, Access Token
+   Value type: Groups
+   Filter: Regex: .*
+   Include in: Any scope
+   ```
+
+### Step 4: Environment Variables
+
+Configure these environment variables:
+
+```bash
+# Required Okta Configuration
+OKTA_DOMAIN=your-org.okta.com
+OKTA_CLIENT_ID=<from_okta_app>
+OKTA_CLIENT_SECRET=<from_okta_app>
+OIDC_WELL_KNOWN_URL=https://your-org.okta.com/oauth2/default/.well-known/openid-configuration
+
+# Optional Configuration  
+OKTA_GROUPS_CLAIM=groups  # Default: "groups"
+OKTA_ADMIN_GROUP=Onyx-Admins  # Default: "Onyx-Admins"
+
+# Simplified Permission Settings
+OAUTH_PERMISSION_ENFORCEMENT=false  # Simple role-based auth only
+OKTA_GROUP_PROCESSING_ENABLED=true   # Enable group-to-role mapping
+```
+
+### Role Mapping Logic
+- **If user is in `Onyx-Admins` group** → `ADMIN` role
+- **If user is not in `Onyx-Admins` group** → `BASIC` role
+
+### Validation
+```bash
+# Test OIDC configuration
+python backend/test_oidc_config.py
+
+# Validate OAuth setup
+python backend/scripts/validate_oauth_config.py
+```
+
+
 ## 🔍 Other Notable Benefits of Onyx
 - Custom deep learning models for indexing and inference time, only through Onyx + learning from user feedback.
 - Flexible security features like SSO (OIDC/SAML/OAuth2), RBAC, encryption of credentials, etc.
