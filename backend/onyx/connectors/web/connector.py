@@ -25,6 +25,9 @@ from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_CLIENT_ID
 from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_CLIENT_SECRET
 from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_TOKEN_URL
+from onyx.configs.app_configs import WEB_CONNECTOR_SESSION_COOKIE_DOMAIN
+from onyx.configs.app_configs import WEB_CONNECTOR_SESSION_COOKIE_NAME
+from onyx.configs.app_configs import WEB_CONNECTOR_SESSION_COOKIE_VALUE
 from onyx.configs.app_configs import WEB_CONNECTOR_VALIDATE_URLS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -527,7 +530,31 @@ class WebConnector(LoadConnector):
 
             return result
 
+        # Set session cookie for authentication if configured
+        if (WEB_CONNECTOR_SESSION_COOKIE_DOMAIN and 
+            WEB_CONNECTOR_SESSION_COOKIE_VALUE and
+            WEB_CONNECTOR_SESSION_COOKIE_DOMAIN in initial_url):
+            from urllib.parse import urlparse
+            domain = urlparse(initial_url).netloc
+            
+            # Use configured session cookie
+            session_cookie = {
+                "name": WEB_CONNECTOR_SESSION_COOKIE_NAME,
+                "value": WEB_CONNECTOR_SESSION_COOKIE_VALUE,
+                "domain": domain,
+                "path": "/",
+                "httpOnly": False,
+                "secure": initial_url.startswith('https')
+            }
+            
+            try:
+                session_ctx.playwright_context.add_cookies([session_cookie])
+                logger.info(f"Set session cookie for authenticated access to {domain}")
+            except Exception as e:
+                logger.error(f"Failed to set session cookie: {e}")
+        
         page = session_ctx.playwright_context.new_page()
+        
         try:
             # Can't use wait_until="networkidle" because it interferes with the scrolling behavior
             page_response = page.goto(
