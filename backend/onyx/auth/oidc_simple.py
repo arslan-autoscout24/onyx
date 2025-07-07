@@ -1,7 +1,5 @@
 """
-Ultra-simplified OIDC authentication handler.
-
-No complex permission tables - just maps OIDC groups to user.role.
+Simplified OIDC group-to-role mapping utilities.
 """
 
 import os
@@ -47,24 +45,4 @@ async def handle_oidc_callback(user: User, oidc_groups: List[str]) -> User:
         user.role = new_role
         # Save user (handled by calling code)
     
-    return user
-
-
-# Simple permission decorators
-from functools import wraps
-from fastapi import HTTPException, Depends
-from onyx.auth.users import current_user
-
-
-def require_admin(user: User = Depends(current_user)):
-    """Require admin role."""
-    if user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Admin access required")
-    return user
-
-
-def require_user(user: User = Depends(current_user)):
-    """Require any authenticated user."""
-    if not user.is_active:
-        raise HTTPException(status_code=403, detail="User account inactive")
     return user
